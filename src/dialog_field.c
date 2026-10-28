@@ -10,6 +10,8 @@
  *  knob still tunes. The network jobs (reference list update, POTA/WWBOTA/HOTA/WWFF spot, QRZ upload) run
  *  x6100-field in a thread; its one-line answer comes back through the scheduler.
  *  What differs between the programmes is in progs[], nowhere else.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload, on the same queue as Wavelog)
  */
 
 #include "dialog_field.h"
@@ -46,6 +48,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -74,9 +77,7 @@
 #define WWFF_KEY    FIELD_DIR "/wwff.conf"
 #define LOGS_DIR    FIELD_DIR "/logs"
 #define HELPER      "x6100-field"
-#define WAVELOG_CONF FIELD_DIR "/wavelog.conf"   /* written by the web page (Wavelog) */
-#define WAVELOG_SYNC "x6100-wavelog sync 2>/dev/null"
-#define WAVELOG_RETRY (5 * 60 * 1000)   /* ms: the next try while QSOs wait for the network */
+#define LOGUP_RETRY (5 * 60 * 1000)   /* ms: the next try while QSOs wait for the network */
 
 #define W           800
 #define HEAD_H      46
@@ -530,98 +531,131 @@ static bool job_start(job_done_t done, const char *fmt, ...) {
     return true;
 }
 
-/* Wavelog live upload: x6100-wavelog sends the new QSOs of the logs to the user's Wavelog (web page,
- * Operating > Wavelog), after each QSO, a minute after the start and every 5 minutes while some wait for
- * the network. A thread of its own, apart from the x6100-field jobs: a QSO logged during a list update
- * still goes. Switched off on the web page, nothing runs */
+/* Live log upload. One helper per service, the same one-line answer ("ok", "ok <n> <message>",
+ * "retry <n> <message>", "error <message>", "off"), the same moments: after each QSO, a minute
+ * after the start, and every 5 minutes while some QSOs wait for the network. A thread of its own,
+ * apart from the x6100-field jobs, so a QSO logged during a list update still goes. Switched off,
+ * nothing runs. Another service is another row of logups[] (eQSL, LoTW, Club Log). */
 
-static atomic_bool wl_busy, wl_again, wl_loud;
-static lv_timer_t *wl_timer;
+typedef struct {
+    const char *name;
+    const char *conf;     /* the line `flag` switches it on */
+    const char *flag;
+    const char *sync;     /* popen: one line on stdout */
+    atomic_bool busy, again, loud;
+    lv_timer_t *timer;
+} logup_t;
 
-static void wavelog_kick(bool loud);
+static logup_t logups[] = {
+    {"Wavelog", FIELD_DIR "/wavelog.conf", "enabled=1", "x6100-wavelog sync 2>/dev/null"},
+    {"QRZ", FIELD_DIR "/qrz.conf", "autoupload=1", "x6100-qrzlog sync 2>/dev/null"},
+};
 
-static void wavelog_retry_cb(lv_timer_t *t) {
-    wl_timer = NULL;    /* one shot: LVGL deletes it after this call */
-    wavelog_kick(false);
+static void logup_kick(logup_t *u, bool loud);
+
+static void logup_retry_cb(lv_timer_t *t) {
+    for (size_t i = 0; i < sizeof(logups) / sizeof(logups[0]); i++) {
+        if (logups[i].timer != t)
+            continue;
+        logups[i].timer = NULL;    /* one shot: LVGL deletes it after this call */
+        logup_kick(&logups[i], false);
+        return;
+    }
 }
 
-/* x6100-wavelog's line: "ok", "ok <n> <message>", "retry <n> <message>", "error <message>" or "off". What
- * was sent is always shown; a retry or an error only on the QSO that met it, not at every try */
-static void wavelog_done_cb(void *arg) {
-    const char *line  = arg, *text = strchr(line, ' ');
-    bool        sent  = !strncmp(line, "ok ", 3), retry = !strncmp(line, "retry ", 6);
-    bool        loud  = atomic_exchange(&wl_loud, false);
+typedef struct {
+    logup_t *u;
+    char     line[160];
+} logup_msg_t;
+
+/* The helper's line. What was sent is always shown; a retry or an error only on the QSO that met
+ * it, not at every quiet try. */
+static void logup_done_cb(void *arg) {
+    logup_msg_t *m    = arg;
+    const char  *text = strchr(m->line, ' ');
+    bool         sent = !strncmp(m->line, "ok ", 3), retry = !strncmp(m->line, "retry ", 6);
+    bool         loud = atomic_exchange(&m->u->loud, false);
 
     if (text && (sent || retry))
         text = strchr(text + 1, ' ');   /* past the count */
     if (text && (sent || loud))
         msg_schedule_long_text_fmt("%s", text + 1);
-    if (retry && !wl_timer) {
-        wl_timer = lv_timer_create(wavelog_retry_cb, WAVELOG_RETRY, NULL);
-        lv_timer_set_repeat_count(wl_timer, 1);
+    if (retry && !m->u->timer) {
+        m->u->timer = lv_timer_create(logup_retry_cb, LOGUP_RETRY, NULL);
+        lv_timer_set_repeat_count(m->u->timer, 1);
     }
 }
 
-static void *wavelog_thread(void *arg) {
-    char  line[160];
-    FILE *p;
+static void *logup_thread(void *arg) {
+    logup_t     *u = arg;
+    logup_msg_t  msg = {.u = u};
+    FILE        *p;
 
     do {    /* a QSO logged while the helper runs: once more, it reads the logs again */
-        atomic_store(&wl_again, false);
-        snprintf(line, sizeof(line), "error Wavelog: no answer");
-        if ((p = popen(WAVELOG_SYNC, "r"))) {
-            if (!fgets(line, sizeof(line), p))
-                snprintf(line, sizeof(line), "error Wavelog: no answer");
+        atomic_store(&u->again, false);
+        snprintf(msg.line, sizeof(msg.line), "error %s: no answer", u->name);
+        if ((p = popen(u->sync, "r"))) {
+            if (!fgets(msg.line, sizeof(msg.line), p))
+                snprintf(msg.line, sizeof(msg.line), "error %s: no answer", u->name);
             pclose(p);
         }
-    } while (atomic_load(&wl_again));
-    line[strcspn(line, "\r\n")] = 0;
-    atomic_store(&wl_busy, false);
-    scheduler_put(wavelog_done_cb, line, sizeof(line));
-    if (atomic_load(&wl_again))     /* asked for between the last run and now */
-        wavelog_kick(false);
+    } while (atomic_load(&u->again));
+    msg.line[strcspn(msg.line, "\r\n")] = 0;
+    atomic_store(&u->busy, false);
+    scheduler_put(logup_done_cb, &msg, sizeof(msg));
+    if (atomic_load(&u->again))     /* asked for between the last run and now */
+        logup_kick(u, false);
     return NULL;
 }
 
-/* enabled=1 in wavelog.conf: switched on on the web page */
-static bool wavelog_on(void) {
+/* `flag` in the conf (enabled=1, autoupload=1): switched on */
+static bool logup_on(const logup_t *u) {
     char  line[256];
     bool  on = false;
-    FILE *f  = fopen(WAVELOG_CONF, "r");
+    FILE *f  = fopen(u->conf, "r");
 
     if (!f)
         return false;
     while (!on && fgets(line, sizeof(line), f))
-        on = !strncmp(line, "enabled=1", 9);
+        on = !strncmp(line, u->flag, strlen(u->flag));
     fclose(f);
     return on;
 }
 
 /* Any thread: loud for a QSO just logged, quiet for the retries */
-static void wavelog_kick(bool loud) {
+static void logup_kick(logup_t *u, bool loud) {
     pthread_t t;
     bool      idle = false;
 
-    if (!wavelog_on())   /* not set up or off: no Python after every QSO */
+    if (!logup_on(u))   /* not set up or off: no Python after every QSO */
         return;
     if (loud)
-        atomic_store(&wl_loud, true);
-    atomic_store(&wl_again, true);
-    if (!atomic_compare_exchange_strong(&wl_busy, &idle, true))
+        atomic_store(&u->loud, true);
+    atomic_store(&u->again, true);
+    if (!atomic_compare_exchange_strong(&u->busy, &idle, true))
         return;
-    if (pthread_create(&t, NULL, wavelog_thread, NULL) != 0) {
-        atomic_store(&wl_busy, false);
+    if (pthread_create(&t, NULL, logup_thread, u) != 0) {
+        atomic_store(&u->busy, false);
         return;
     }
     pthread_detach(t);
 }
 
-static void wavelog_start_cb(lv_timer_t *t) {
-    wavelog_kick(false);    /* what waited at the last switch off */
+static void logup_kick_all(bool loud) {
+    for (size_t i = 0; i < sizeof(logups) / sizeof(logups[0]); i++)
+        logup_kick(&logups[i], loud);
 }
 
-void dialog_field_wavelog_start(void) {
-    lv_timer_set_repeat_count(lv_timer_create(wavelog_start_cb, 60000, NULL), 1);
+static void logup_start_cb(lv_timer_t *t) {
+    logup_kick_all(false);    /* what waited at the last switch off */
+}
+
+void dialog_field_logup_start(void) {
+    lv_timer_set_repeat_count(lv_timer_create(logup_start_cb, 60000, NULL), 1);
+}
+
+void dialog_field_logup_kick(void) {
+    logup_kick_all(false);
 }
 
 /* The nearest references, looked up in a thread (the list has ~260000 lines) */
@@ -1862,7 +1896,7 @@ static bool day_log_add(const field_qso_t *q, const char *me) {
         msg_schedule_text_ms(9000, "QSO not saved: %s", field_log_error(errno));   /* long: it scrolls */
         return false;
     }
-    wavelog_kick(true);
+    logup_kick_all(true);
     return true;
 }
 
@@ -1948,7 +1982,7 @@ static bool activation_log_add(const field_qso_t *q) {
         msg_schedule_text_ms(9000, "QSO not saved: %s", field_log_error(errno));   /* long: it scrolls */
         return false;
     }
-    wavelog_kick(true);
+    logup_kick_all(true);
     log_load();
     msg_update_text_fmt("QSO %d: %s %s %s %s", qsos_total, q->call, q->rst_s, q->rst_r, field_qso_tag(q));
     if (dialog.run && (st.screen == SCR_LOG || act_freq))
@@ -2322,10 +2356,12 @@ static void qrz_conf_read(qrz_conf_t *c) {
     }
 }
 
-/* active=N replaced (or added), the rest of the file as it is */
+/* active=N replaced (or added). Every other line stays, including autoupload= and since=.
+ * The rewrite is mode 0600: the API key is in this file, and a plain create would
+ * leave it readable by the rest of the system. */
 static bool qrz_conf_set_active(int active) {
     char  lines[16][256];
-    int   n = 0;
+    int   n = 0, fd;
     bool  seen = false;
     FILE *f = fopen(QRZ_CONF, "r");
 
@@ -2339,8 +2375,14 @@ static bool qrz_conf_set_active(int active) {
         n++;
     }
     fclose(f);
-    f = fopen(QRZ_CONF ".tmp", "w");
-    if (!f) return false;
+    fd = open(QRZ_CONF ".tmp", O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0) return false;
+    fchmod(fd, 0600);
+    f = fdopen(fd, "w");
+    if (!f) {
+        close(fd);
+        return false;
+    }
     if (!seen) fprintf(f, "active=%d\n", active);
     for (int i = 0; i < n; i++) fputs(lines[i], f);
     fclose(f);

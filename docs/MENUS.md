@@ -51,5 +51,6 @@ of text for NavTex.
 | TX Cal (calibration, CESSB, protection, S-meter front end) | TX Cal, "TX audio, SWR" |
 | Info (version, update, baseband, broadcast list, factory reset, power) | System, "Update, power" |
 | Walkie | (in the APP grid here as well) |
+| Logbook (QRZ upload, the logbook call, the API key) | (web configurator, Operating > QRZ, as well) |
 
 The web configurator has the same **Icon menus** switch on its Display page.

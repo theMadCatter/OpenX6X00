@@ -1,0 +1,239 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright (c) 2026 Chris Fink KD0CQ
+# QRZ Logbook live upload (https://www.qrz.com/docs/logbook/QRZLogbookAPI.html). The queue is the
+# one Wavelog uses (logupload.py): every QSO in <dir>/logs, from the moment upload is switched on,
+# goes to QRZ in the background. A QSO QRZ already has is counted, not sent again and not queued
+# again. One that QRZ refuses is kept aside. No network, and the QSOs wait on the SD card.
+#
+#   x6100-qrzlog sync    "off" | "ok" | "ok <n> <message>" | "retry <n> <message>" | "error <message>"
+#   x6100-qrzlog test    "ok ..." when the key's logbook answers STATUS. The key is X6100_QRZLOG_KEY
+#                        when the web page has typed one and not saved it, else the active profile.
+#
+# <dir> is /mnt/field (env X6100_FIELD_DIR). Files:
+#   qrz.conf            the Field Ops profiles, also written by Settings > Logbook and Operating > QRZ:
+#                       active=N, call1/key1 .. call3/key3 (an old single key= is profile 1),
+#                       autoupload=1, since=<unix time>. A QRZ logbook is one callsign, /P included,
+#                       so each profile is one logbook. A QSO goes to the profile with its
+#                       STATION_CALLSIGN. One whose callsign has no profile waits.
+#   qrzlog.state        same shape as wavelog.state
+#   qrzlog.queue        the QSOs waiting; it survives a restart
+#   qrzlog.failed.adi   QSOs QRZ refused for the record itself (not a duplicate): not sent again unless edited
+#
+# The API is POST https://logbook.qrz.com/api (env X6100_QRZ_API), form fields KEY, ACTION, ADIF.
+# INSERT answers RESULT=OK, RESULT=FAIL&REASON=...duplicate... or RESULT=AUTH when the key has no
+# logbook subscription. Nothing here calls QRZ unless sync or test is run.
+
+import os
+import re
+import signal
+import ssl
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+sys.path.insert(0, os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), "..", "share", "x6100")))
+from logupload import Fail, Hold, Retry, adif_fields, field_dir, one_line, run_sync, user_agent
+
+QRZ_API = os.environ.get("X6100_QRZ_API", "https://logbook.qrz.com/api")
+TIMEOUT = 20
+RUN_LIMIT = 300
+PROFILES = 3
+
+
+def read_conf():
+    """qrz.conf as a flat dict. The helper and the web page write the same lines."""
+    conf = {}
+    try:
+        with open(os.path.join(field_dir(), "qrz.conf"), errors="replace") as f:
+            for line in f:
+                k, sep, v = line.strip().partition("=")
+                if sep:
+                    conf[k.strip()] = v.strip()
+    except OSError:
+        pass
+    return conf
+
+
+def profiles(conf):
+    """(active, [(n, call, key), ...]) of the profiles that have a key. active is one of them when
+    any key is set, else 1. A profile call is upper case; an empty call is the old single key=."""
+    active = int(conf["active"]) if str(conf.get("active", "")).isdigit() else 1
+    calls = [(conf.get(f"call{i}", "") or "").strip().upper() for i in range(1, PROFILES + 1)]
+    keys = [(conf.get(f"key{i}", "") or "").strip() for i in range(1, PROFILES + 1)]
+    if not any(keys) and (conf.get("key") or "").strip():
+        keys[0] = conf["key"].strip()
+    found = [(i + 1, calls[i], keys[i]) for i in range(PROFILES) if keys[i]]
+    if not any(n == active and k for n, _c, k in ((i + 1, calls[i], keys[i]) for i in range(PROFILES))):
+        active = found[0][0] if found else 1
+    return active, found
+
+
+def station_of(fields):
+    return (fields.get("station_callsign") or fields.get("operator") or "").strip().upper()
+
+
+def pick(conf, fields):
+    """(n, call, key) of the logbook this QSO belongs to, or None when it has to wait.
+
+    QRZ keeps one logbook per callsign and /P is a different callsign, so the profile call has to
+    match STATION_CALLSIGN. A key stored with no callsign (the old single key=) takes a QSO no
+    named profile claims. A record with no station callsign at all goes to the active profile,
+    which is also what the manual Field Ops upload does."""
+    active, found = profiles(conf)
+    if not found:
+        return None
+    me = station_of(fields)
+    exact = [p for p in found if p[1] and p[1] == me]
+    if exact:
+        return next((p for p in exact if p[0] == active), exact[0])
+    blanks = [p for p in found if not p[1]]
+    named = any(p[1] for p in found)
+    if blanks and (not me or not named):
+        return next((p for p in blanks if p[0] == active), blanks[0])
+    if not me:
+        return next((p for p in found if p[0] == active), found[0])
+    return None
+
+
+def adif_set(rec, name, value):
+    """rec with <name> set, the length in bytes, the <eor> left where it was."""
+    eor = ""
+    m = re.search(r"<eor>\s*$", rec, re.I)
+    if m:
+        eor, rec = rec[m.start():], rec[:m.start()]
+    rec = re.sub(r"<%s:\d+(?::[^>]*)?>[^<]*" % re.escape(name), "", rec, count=1, flags=re.I)
+    raw = value.encode()
+    return rec.rstrip() + f"<{name}:{len(raw)}>{value}" + (eor or "<eor>")
+
+
+def qrz_post(fields):
+    """(HTTP code, body). Retry when QRZ cannot be reached, Fail when the certificate is refused.
+    The body is form-encoded: an '&' in a name (Trinidad & Tobago) must not split the form."""
+    data = urllib.parse.urlencode(fields).encode()
+    req = urllib.request.Request(
+        QRZ_API, data=data, method="POST",
+        headers={"User-Agent": user_agent(), "Accept": "text/plain",
+                 "Content-Type": "application/x-www-form-urlencoded"})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            return r.status, r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError) as e:
+        why = getattr(e, "reason", e)
+        if isinstance(why, ssl.SSLCertVerificationError):
+            raise Fail(f"certificate refused ({one_line(why.verify_message or why, 40)})")
+        raise Retry(one_line(why or e, 50))
+
+
+def qrz_answer(code, text):
+    """The name=value body, or None when it is not QRZ (a WiFi login page)."""
+    if not text or "<html" in text[:400].lower() or "RESULT" not in text.upper():
+        return None
+    pairs = urllib.parse.parse_qsl(text.strip().replace("\n", "&"), keep_blank_values=True)
+    return {k.upper(): v for k, v in pairs}
+
+
+def qrz_fail(code, parsed, text):
+    """Raise Retry or Fail, or return 'ok' / 'dupe' / 'reject <why>'."""
+    if code in (408, 429) or code >= 500:
+        raise Retry(f"server HTTP {code}")
+    if parsed is None:
+        raise Retry(f"not QRZ's answer (HTTP {code})")
+    result = parsed.get("RESULT", "").upper()
+    reason = parsed.get("REASON", "")
+    if code in (401, 403) or result == "AUTH":
+        raise Fail(one_line(reason, 70) or "key refused, or the logbook needs a paid QRZ.com subscription")
+    if result in ("OK", "REPLACE"):
+        return "ok"
+    if result == "FAIL" and "duplicate" in (reason + " " + text).lower():
+        return "dupe"
+    if result == "FAIL":
+        return "reject " + one_line(reason or "refused", 60)
+    raise Retry(f"not QRZ's answer (HTTP {code})")
+
+
+class QrzService:
+    """QRZ on the shared queue. The key is the profile whose callsign is the QSO's."""
+
+    name = "QRZ"
+    slug = "qrzlog"
+    retry_literal = ("server", "not QRZ")
+
+    def enabled(self, conf):
+        _active, found = profiles(conf)
+        return conf.get("autoupload") == "1" and bool(found)
+
+    def hold_phrase(self, label):
+        return f"no logbook for {label}"
+
+    def deliver(self, conf, q):
+        fields = adif_fields(q["adif"])
+        chosen = pick(conf, fields)
+        if not chosen:
+            raise Hold(station_of(fields) or f"{q['call']} (no station callsign)")
+        _n, call, key = chosen
+        adif = q["adif"]
+        # QRZ requires the station callsign. A record that has none is named with the profile,
+        # and one that already has one is left as it was logged (a /P stays /P).
+        if call and not (fields.get("station_callsign") or "").strip():
+            adif = adif_set(adif, "STATION_CALLSIGN", call)
+        if call and not (fields.get("operator") or "").strip():
+            adif = adif_set(adif, "OPERATOR", call)
+        code, text = qrz_post({"KEY": key, "ACTION": "INSERT", "ADIF": adif})
+        return qrz_fail(code, qrz_answer(code, text), text)
+
+
+def cmd_sync(conf):
+    return run_sync(QrzService(), conf)
+
+
+def cmd_test(conf):
+    """STATUS on the key the page typed, or the active profile's saved key. Never prints the key."""
+    key = (os.environ.get("X6100_QRZLOG_KEY") or "").strip()
+    if not key:
+        active, found = profiles(conf)
+        key = next((k for n, _c, k in found if n == active), "")
+    if not key:
+        raise Fail("API key needed")
+    try:
+        code, text = qrz_post({"KEY": key, "ACTION": "STATUS"})
+        res = qrz_fail(code, qrz_answer(code, text), text)
+    except Retry as e:
+        raise Fail(f"no connection: {e}")
+    return "ok " + test_line(res, qrz_answer(code, text))
+
+
+def test_line(res, parsed):
+    if res != "ok":
+        raise Fail(res[7:] if res.startswith("reject ") else res)
+    bits = []
+    parsed = parsed or {}
+    for k in ("CALL", "CALLSIGN", "OWNER", "NAME", "QSOS", "COUNT"):
+        if parsed.get(k):
+            bits.append(one_line(parsed[k], 24))
+    return "QRZ logbook" + (": " + ", ".join(bits[:3]) if bits else "")
+
+
+def main(argv):
+    cmds = {"sync": cmd_sync, "test": cmd_test}
+    if len(argv) != 1 or argv[0] not in cmds:
+        print("error usage: x6100-qrzlog sync|test")
+        return 1
+    try:
+        signal.signal(signal.SIGALRM, lambda *_: (print("error timed out"), sys.exit(1)))
+        signal.alarm(RUN_LIMIT)
+        result = cmds[argv[0]](read_conf())
+        print(result)
+        return 0 if result.split()[0] in ("ok", "off") else 1
+    except Fail as e:
+        print(f"error {e}")
+    except Exception as e:
+        print(f"error {one_line(e) or type(e).__name__}")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

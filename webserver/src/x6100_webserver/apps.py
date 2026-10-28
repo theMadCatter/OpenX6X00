@@ -1,3 +1,4 @@
+# Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload)
 from datetime import datetime
 try:
     import zlib
@@ -1034,8 +1035,11 @@ QRZ_PROFILES = 3
 
 def qrz_read():
     """qrz.conf: up to three QRZ Logbook profiles, call1/key1..call3/key3 and active=N (an old single
-    key= is profile 1). The keys never go back to the browser, only whether one is set."""
-    active, legacy, calls, keys = 1, "", [""] * QRZ_PROFILES, [""] * QRZ_PROFILES
+    key= is profile 1), plus autoupload=1 and since=<unix> for the automatic upload. The keys never
+    go back to the browser, only whether one is set. Field Ops and Operating > QRZ share the file."""
+    active, legacy = 1, ""
+    calls, keys = [""] * QRZ_PROFILES, [""] * QRZ_PROFILES
+    autoupload, since = False, 0
     try:
         with open(field_path("qrz.conf"), errors="replace") as f:
             for line in f:
@@ -1045,6 +1049,10 @@ def qrz_read():
                 k, v = k.strip(), v.strip()
                 if k == "active" and v.isdigit():
                     active = int(v)
+                elif k == "autoupload":
+                    autoupload = v == "1"
+                elif k == "since" and v.isdigit():
+                    since = int(v)
                 elif k == "key":
                     legacy = v
                 elif k[:4] == "call" and k[4:].isdigit() and 1 <= int(k[4:]) <= QRZ_PROFILES:
@@ -1057,28 +1065,62 @@ def qrz_read():
         keys[0] = legacy
     if not 1 <= active <= QRZ_PROFILES:
         active = 1
-    return active, calls, keys
+    return {"active": active, "calls": calls, "keys": keys, "autoupload": autoupload, "since": since}
 
 
-def qrz_write(active, calls, keys):
+def qrz_write(conf):
+    """The whole file, so a Field Ops save does not drop autoupload and since, and the QRZ page
+    does not drop a profile the other page stored. No keys left: the file goes, as before."""
     path = field_path("qrz.conf")
     os.makedirs(settings.FIELD_DIR, exist_ok=True)
+    calls, keys = conf["calls"], conf["keys"]
     if not any(keys):
         if os.path.exists(path):
             os.remove(path)
         return
+    active = conf["active"]
+    if not 1 <= active <= QRZ_PROFILES or not keys[active - 1]:
+        active = next((i + 1 for i in range(QRZ_PROFILES) if keys[i]), 1)
     tmp = path + ".tmp"
     with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
         f.write(f"active={active}\n")
         for i in range(QRZ_PROFILES):
             if keys[i]:
                 f.write(f"call{i + 1}={calls[i]}\nkey{i + 1}={keys[i]}\n")
+        if conf.get("autoupload"):
+            f.write("autoupload=1\n")
+        if conf.get("since"):
+            f.write(f"since={int(conf['since'])}\n")
     os.rename(tmp, path)
 
 
+def qrz_apply_profiles(conf, body):
+    """Callsigns and keys from a page onto conf. An empty key keeps the stored one. Returns the
+    reason the page is wrong, or None."""
+    calls, keys = conf["calls"], conf["keys"]
+    for i, prof in enumerate((body.get("profiles") or [])[:QRZ_PROFILES]):
+        if not isinstance(prof, dict):
+            return "No such profile"
+        call = str(prof.get("call", "")).strip().upper()
+        key = str(prof.get("key", "")).strip()
+        if call and not re.fullmatch(r"[A-Z0-9/-]{1,16}", call):
+            return f"Profile {i + 1}: the call is letters, digits, / and -"
+        if key and not re.fullmatch(r"[!-~]{1,128}", key):
+            return f"Profile {i + 1}: a key is 1-128 printable characters, no spaces"
+        calls[i] = call
+        if key:
+            keys[i] = key
+    if isinstance(body.get("active"), int):
+        conf["active"] = body["active"]
+    if not 1 <= conf["active"] <= QRZ_PROFILES or not keys[conf["active"] - 1]:
+        conf["active"] = next((i + 1 for i in range(QRZ_PROFILES) if keys[i]), 1)
+    return None
+
+
 def qrz_state():
-    active, calls, keys = qrz_read()
-    return {"active": active, "profiles": [{"call": calls[i], "key": bool(keys[i])} for i in range(QRZ_PROFILES)]}
+    c = qrz_read()
+    return {"active": c["active"], "profiles": [{"call": c["calls"][i], "key": bool(c["keys"][i])}
+                                                 for i in range(QRZ_PROFILES)]}
 
 
 def field_refs():
@@ -1152,37 +1194,43 @@ def get_field():
             "logs": field_logs()}
 
 
+# One lock for both writers of qrz.conf (Field Ops and Operating > QRZ): each writes the whole file
+qrz_lock = threading.Lock()
+
+
 @app.post('/api/field/qrz')
 def set_field_qrz():
     """The QRZ Logbook profiles: {"active": N, "profiles": [{"call", "key"}, ...]} ("" key: the one
-    stored stays), or {"remove": N}. The radio's log page picks the active one too."""
-    body = bottle.request.json or {}
-    active, calls, keys = qrz_read()
+    stored stays), or {"remove": N}. The radio's log page picks the active one too. autoupload and
+    since, written by Operating > QRZ and Settings > Logbook, stay."""
+    with qrz_lock:
+        err = field_qrz_save(bottle.request.json or {})
+    return err if err is not None else get_field()
+
+
+def field_qrz_save(body):
+    """set_field_qrz's work, under qrz_lock. None: saved; else the error to return."""
+    c = qrz_read()
     if "remove" in body:
         n = body["remove"]
         if not (isinstance(n, int) and 1 <= n <= QRZ_PROFILES):
             return api_error(400, "No such profile")
-        calls[n - 1] = keys[n - 1] = ""
+        c["calls"][n - 1] = c["keys"][n - 1] = ""
+        if not c["keys"][c["active"] - 1]:
+            c["active"] = next((i + 1 for i in range(QRZ_PROFILES) if c["keys"][i]), 1)
+        if not any(c["keys"]):
+            c["autoupload"] = False
     else:
-        for i, prof in enumerate((body.get("profiles") or [])[:QRZ_PROFILES]):
-            call = str(prof.get("call", "")).strip().upper()
-            key = str(prof.get("key", "")).strip()
-            if call and not re.fullmatch(r"[A-Z0-9/-]{1,16}", call):
-                return api_error(400, f"Profile {i + 1}: the call is letters, digits, / and -")
-            if key and not re.fullmatch(r"[!-~]{1,128}", key):
-                return api_error(400, f"Profile {i + 1}: a key is 1-128 printable characters, no spaces")
-            calls[i] = call
-            if key:
-                keys[i] = key
-        if isinstance(body.get("active"), int):
-            active = body["active"]
-    if not 1 <= active <= QRZ_PROFILES or not keys[active - 1]:
-        active = next((i + 1 for i in range(QRZ_PROFILES) if keys[i]), 1)
+        why = qrz_apply_profiles(c, body)
+        if why:
+            return api_error(400, why)
     try:
-        qrz_write(active, calls, keys)
+        qrz_write(c)
     except OSError as e:
         return api_error(500, f"Can't save: {e}")
-    return get_field()
+    if c.get("autoupload") and any(c["keys"]):   # a profile just added: a QSO waiting for it can go
+        threading.Thread(target=qrzlog_run, args=("sync",), daemon=True).start()
+    return None
 
 
 @app.post('/api/field/<name:re:hota|wwff>')
@@ -1404,6 +1452,114 @@ def wavelog_test():
 @app.post('/api/wavelog/sync')
 def wavelog_sync():
     return wavelog_state(wavelog_run("sync"))
+
+
+# QRZ Logbook auto-upload: the same qrz.conf as Field Ops (profiles, autoupload, since). x6100-qrzlog
+# sends each new QSO. The key never goes back to the browser. qrzlog.state and qrzlog.queue are the helper's.
+
+def qrzlog_state(result=None):
+    c = qrz_read()
+    last = wavelog_json("qrzlog.state", {}).get("last") or {}
+    queue = wavelog_json("qrzlog.queue", [])
+    since = c["since"]
+    return {"enabled": c["autoupload"] and any(c["keys"]),
+            "since": time.strftime("%Y-%m-%d %H:%M", time.localtime(since)) if since else "",
+            "active": c["active"],
+            "profiles": [{"call": c["calls"][i], "key": bool(c["keys"][i])} for i in range(QRZ_PROFILES)],
+            "queue": len(queue) if isinstance(queue, list) else 0, "result": result,
+            "last": {"result": last.get("result", ""),
+                     "time": time.strftime("%Y-%m-%d %H:%M", time.localtime(last["time"])) if last.get("time") else ""}}
+
+
+def qrzlog_run(cmd, key=None, timeout=330):
+    """x6100-qrzlog's line. key: one typed on the page and not saved, for test only; sync never gets it."""
+    env = dict(os.environ, X6100_FIELD_DIR=settings.FIELD_DIR)
+    env.pop("X6100_QRZLOG_KEY", None)
+    if key:
+        env["X6100_QRZLOG_KEY"] = key
+    try:   # the helper gives up after 300 s (its RUN_LIMIT): a little longer here, to hear why
+        r = subprocess.run([settings.QRZLOG_CMD, cmd], capture_output=True, text=True, timeout=timeout, env=env)
+        lines = r.stdout.strip().splitlines()
+        return lines[-1] if lines else f"error exit code {r.returncode}"
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"error {e}"
+
+
+@app.route('/qrzlog')
+def qrzlog_page():
+    return bottle.template('qrzlog')
+
+
+@app.get('/api/qrzlog')
+def get_qrzlog():
+    return qrzlog_state()
+
+
+@app.post('/api/qrzlog')
+def set_qrzlog():
+    """{"enabled", "active", "profiles": [{"call", "key"}]}, or {"remove": N}. An empty key keeps the
+    stored one. Switched on, QSOs from now on are sent, and a key is required. One save at a time,
+    the same lock as Field Ops, which writes the same file."""
+    with qrz_lock:
+        return qrzlog_save(bottle.request.json or {})
+
+
+def qrzlog_save(body):
+    """set_qrzlog's work, under qrz_lock"""
+    c = qrz_read()
+    if "remove" in body:
+        n = body["remove"]
+        if not (isinstance(n, int) and 1 <= n <= QRZ_PROFILES):
+            return api_error(400, "No such profile")
+        c["calls"][n - 1] = c["keys"][n - 1] = ""
+        if not any(c["keys"]):
+            c["autoupload"] = False
+        elif not c["keys"][c["active"] - 1]:
+            c["active"] = next((i + 1 for i in range(QRZ_PROFILES) if c["keys"][i]), 1)
+    else:
+        why = qrz_apply_profiles(c, body)
+        if why:
+            return api_error(400, why)
+        enabled = bool(body.get("enabled"))
+        if enabled and not any(c["keys"]):
+            return api_error(400, "To switch it on: an API key")
+        if enabled and not c["autoupload"]:
+            c["since"] = int(time.time())   # from now on: the log from before is not sent
+        c["autoupload"] = enabled
+    try:
+        qrz_write(c)
+    except OSError as e:
+        return api_error(500, f"Can't save: {e}")
+    if c.get("autoupload") and any(c["keys"]):   # what waits goes now, not at the next QSO
+        threading.Thread(target=qrzlog_run, args=("sync",), daemon=True).start()
+    return qrzlog_state()
+
+
+@app.post('/api/qrzlog/test')
+def qrzlog_test():
+    """{"profile": N, "key": K}. An empty key is the one stored for that profile. The key is handed
+    to the helper for this run only and is not written to qrz.conf."""
+    body = bottle.request.json or {}
+    c = qrz_read()
+    n = body.get("profile", c["active"])
+    if not (isinstance(n, int) and 1 <= n <= QRZ_PROFILES):
+        return api_error(400, "No such profile")
+    key = str(body.get("key", "")).strip()
+    if key and not re.fullmatch(r"[!-~]{1,128}", key):
+        return api_error(400, "A key is 1-128 printable characters, no spaces")
+    if not key:
+        key = c["keys"][n - 1]
+    if not key:
+        return api_error(400, "API key needed")
+    line = qrzlog_run("test", key, timeout=40)
+    if not line.startswith("ok "):
+        return api_error(502, "QRZ: " + line.partition(" ")[2])
+    return {"logbook": line[3:]}
+
+
+@app.post('/api/qrzlog/sync')
+def qrzlog_sync():
+    return qrzlog_state(qrzlog_run("sync"))
 
 
 def field_active_log():

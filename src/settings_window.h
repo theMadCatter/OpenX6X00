@@ -4,11 +4,12 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload)
  */
 
 #pragma once
 
-/* Settings: eleven tabs on three button pages and a rail at the left */
+/* Settings: twelve tabs on three button pages and a rail at the left */
 
 #include "app_window.h"
 

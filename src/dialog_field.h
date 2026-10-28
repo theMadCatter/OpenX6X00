@@ -5,6 +5,8 @@
  *  (SOTA, POTA): the reference where you are, the activation with its log and spot,
  *  the bands with the Reverse Beacon Network. Its state is on the SD card, so leaving
  *  it (GEN) or a restart finds everything as it was.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload)
  */
 
 #pragma once
@@ -26,8 +28,10 @@ bool dialog_field_qso_log(const char *text);
 /* A QSO of FT8, FT4 or JS8 into the day's log */
 void dialog_field_day_log(const qso_log_record_t *r);
 
-/* Wavelog live upload (x6100-wavelog): a first try a minute after the start, then after each QSO */
-void dialog_field_wavelog_start(void);
+/* Live log upload (x6100-wavelog, x6100-qrzlog): a first try a minute after the start,
+ * then after each QSO. Settings calls the kick when the QRZ key is saved. */
+void dialog_field_logup_start(void);
+void dialog_field_logup_kick(void);
 
 /* Shared with the Bands app: TEST DE <call> in CW; a typical frequency of the band (cluster_band_of()) */
 void dialog_field_test_beacon(void);

@@ -1,6 +1,6 @@
 # OpenX6X00 web configurator
 
-The radio's web pages (bands, digital modes, memories, cluster, Field Ops, logs,
+The radio's web pages (bands, digital modes, memories, cluster, Field Ops, QRZ Logbook, logs,
 gallery, backup, display, time, Ethernet, TCI server), served by the radio on
 port 80 (and 443 with a self-signed certificate, for the Gallery's in-browser
 conversion). Python 3 and [bottle](https://bottlepy.org/), LGPL-2.1

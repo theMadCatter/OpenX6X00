@@ -12,7 +12,7 @@ Settings. Button and option names are written as the radio shows them.
 - [Getting started](#getting-started): [first steps](#first-steps), [buttons and knobs](#buttons-and-knobs)
 - [Updating the firmware](#updating-the-firmware)
 - [Main screen](#main-screen): [band keys](#band-keys), [receiving outside the ham bands](#receiving-outside-the-ham-bands), [WR12 receiver](#wr12-receiver-x6200), [low battery](#low-battery), [battery time](#battery-time), [status bar](#status-bar), [S-meter](#s-meter), [waterfall](#waterfall), [screen recording](#screen-recording), [Walkie Talkie](#walkie-talkie-mode)
-- [Settings](#settings): [General](#general-tab), [Display](#display-tab), [Audio](#audio-tab), [Wireless](#wireless-tab), [Bluetooth](#bluetooth-tab), [Keys](#keys-tab), [Cluster](#cluster-tab), [TX Cal](#tx-cal-tab), [Info](#info-tab), [Walkie](#walkie-tab)
+- [Settings](#settings): [General](#general-tab), [Display](#display-tab), [Audio](#audio-tab), [Wireless](#wireless-tab), [Bluetooth](#bluetooth-tab), [Keys](#keys-tab), [Cluster](#cluster-tab), [TX Cal](#tx-cal-tab), [Info](#info-tab), [Walkie](#walkie-tab), [Logbook](#logbook-tab)
 - [Transmitting](#transmitting): [TX shift](#tx-shift), [SWR scan and the tuner](#swr-scan-and-the-tuner), [digital-mode TX level](#digital-mode-tx-level), [recording voice messages](#recording-voice-messages), [ALC in CW](#alc-in-cw)
 - [Digital modes](#digital-modes): [opening a mode](#opening-a-mode), [FT8 and FT4](#ft8-and-ft4), [JS8](#js8), [WSPR](#wspr), [SSTV, WeFax and NavTex](#sstv-wefax-and-navtex), [PSK31, PSK63 and Olivia](#psk31-psk63-and-olivia), [JTTY](#jtty), [RTTY and WeFax TX](#rtty-and-wefax-tx)
 - [CW](#cw): [CW decoder](#cw-decoder), [CW from the keyboard](#cw-from-the-keyboard), [CW Keyboard](#cw-keyboard), [USB paddle](#usb-paddle), [CW messages](#cw-messages), [CW Trainer](#cw-trainer)
@@ -21,6 +21,7 @@ Settings. Button and option names are written as the radio shows them.
 - [Themes](#themes)
 - [Web configurator](#web-configurator)
 - [Wavelog](#wavelog)
+- [QRZ Logbook](#qrz-logbook)
 - [Winlink](#winlink)
 - [Browser panel](#browser-panel)
 - [Browser remote](#browser-remote)
@@ -494,7 +495,7 @@ restart.
 
 APP (page 2) > Settings. The tabs are on three button pages: General, Display,
 Audio, Wireless (page 1); Bluetooth, Keys, Cluster, TX Cal (page 2); Info,
-Walkie (page 3). The page button, or the APP key pressed again, turns the
+Walkie, Logbook (page 3). The page button, or the APP key pressed again, turns the
 page and opens its first tab.
 
 The MFK walks the controls and stops at the first and last one. There the
@@ -889,6 +890,29 @@ POWER, below Factory reset, has three lines:
   instead of tuning. The same as the MEM/VFO button on WLK 1.
 - Microphone: the input used while the walkie screen is up (Built-in, Hand,
   Auto; default Built-in). The Audio tab's input is not changed.
+
+### Logbook tab
+
+QRZ Logbook upload for every QSO the radio logs. Where: Settings > Logbook.
+The same profiles and the same switch are on the web configurator, Operating >
+QRZ (see [QRZ Logbook](#qrz-logbook)).
+
+| Card | Options |
+|---|---|
+| QRZ LOGBOOK | Upload to QRZ, Logbook call, API key, Key (Remove, Test), Status |
+
+- Upload to QRZ: each QSO goes a few seconds after it is logged. Switching it
+  on with no API key stored is refused. From the moment it is switched on, the
+  QSOs logged before are not sent.
+- Logbook call: the callsign of the logbook the key belongs to. QRZ keeps one
+  logbook per callsign, so a /P call is its own. Typing a call that is already
+  stored switches to that profile. Typing a new one fills an empty profile, or
+  replaces the one on screen when all three are in use.
+- API key: typed once and not shown again. An empty box keeps the stored key.
+  With no callsign on the profile, the radio's callsign is used when it looks
+  like one.
+- Remove takes away the profile on screen. Test asks QRZ whether the key's
+  logbook answers. Status is the last result and how many QSOs are waiting.
 
 ## Transmitting
 
@@ -1899,13 +1923,18 @@ Upload QRZ, QRZ: <call>, Back.
 - QRZ: <call> (page LOGBOOK) shows the QRZ profile the upload goes to, and a
   press turns to the next one: "QRZ profile: <call>". The profiles, up to
   three callsigns each with a Logbook API key, are set on the Field Ops page
-  of the web configurator, where the active one is chosen too. With one
-  profile the key says "Only one QRZ profile"; with none, "No QRZ profile:
-  add it on the web page, Field Ops".
+  of the web configurator, on Operating > QRZ, or on the radio at Settings >
+  Logbook. With one profile the key says "Only one QRZ profile"; with none,
+  "No QRZ profile: add it on the web page, Field Ops".
 - It needs your QRZ Logbook API key, pasted on the Field Ops page of the web
-  configurator.
+  configurator (or typed on Settings > Logbook).
 - Uploading to QRZ needs a QRZ.com Logbook API key, which QRZ.com only gives
   with a paid QRZ.com subscription (XML level or higher).
+- This button still sends the whole activation log to the active profile.
+  Every QSO the radio logs, including these, also goes on its own when Upload
+  to QRZ is on (Settings > Logbook, or the web configurator, Operating > QRZ).
+  A QSO both send is counted by QRZ as already there the second time. See
+  [QRZ Logbook](#qrz-logbook).
 - Other messages: "Uploading the log to QRZ...", "No log to upload", "No QRZ profile:
   add it on the web page, Field Ops", or "QRZ: HTTP <code> after N sent" when the service itself failed.
 
@@ -2246,6 +2275,7 @@ The menu has General and four groups:
 | Operating | Cluster | DX cluster servers, filters and alerts (writes `/mnt/cluster.conf`) |
 | | Field Ops | QRZ Logbook profiles (three callsigns with their API keys, the active one), HOTA key, WWFF key, update the reference lists, download the activation logs |
 | | Wavelog | every logged QSO to your Wavelog: URL, API key, station profile (one, or Automatic by the radio's callsign), connection test, Send now (writes `/mnt/field/wavelog.conf`, see [Wavelog](#wavelog)) |
+| | QRZ | every logged QSO to your QRZ Logbook: on/off, up to three callsign profiles and their API keys (the same file as Field Ops), connection test, Send now (writes `/mnt/field/qrz.conf`, see [QRZ Logbook](#qrz-logbook)) |
 | | Winlink | Winlink email over HF with Pat and ARDOP: Enabled, callsign, locator, the Winlink password (write only), ARDOP bandwidth, the status and Open the mailbox (Pat's page on port 8080; writes `/mnt/winlink.conf`, see [Winlink](#winlink)) |
 | | CW messages | the MSG > CW messages: add, edit, delete (1-64 characters) |
 | | Macros | the PSK31, Olivia and JTTY macros (add, edit, move up, delete) and the JS8 INFO and STATUS answers (see below) |
@@ -2288,7 +2318,7 @@ port, a list that is full), "No reply from the radio in 15 s: reload the page
 to see what was saved" (the radio may have saved it), "The radio's web server
 could not be reached (WiFi?)" (the browser got no answer at all: the WiFi, a
 phone that went to sleep) or "The radio's web server failed (HTTP N)". The
-Tailscale, Winlink and Wavelog pages say the same, but wait longer than 15 s:
+Tailscale, Winlink, Wavelog and QRZ pages say the same, but wait longer than 15 s:
 they run a helper. The other pages (Field Ops, Logs, Network, Time, Update,
 Backup) give the radio's reason when it sent one, else only that the save
 failed, and wait as long as the browser does.
@@ -2374,6 +2404,23 @@ Every QSO the radio logs goes to your [Wavelog](https://github.com/wavelog/wavel
 - HTTPS is checked against the radio's root certificates. Check the certificate off only for a Wavelog at home with a self-signed certificate.
 - The key is kept in `/mnt/field/wavelog.conf`. The Wavelog page never shows it again and it is not in the Backup, but like the QRZ, HOTA and WWFF keys it can be downloaded from the Files page by anyone who reaches the web configurator (your LAN, and your tailnet with Tailscale on). The upload uses Wavelog's API (`api/qso`, `api/station_info`, `api/version`); QSOs sent through it are not uploaded on to other services by Wavelog at once and get no callbook lookup there.
 - By hand: `x6100-wavelog sync`, `x6100-wavelog stations`, `x6100-wavelog test` (one line each, as the other helpers).
+
+## QRZ Logbook
+
+Every QSO the radio logs goes to your [QRZ Logbook](https://logbook.qrz.com/) as well, a few seconds after it is logged: FT8, FT4, FT2, JS8, voice and CW (the phone's logger, the CW keyboard) and the Field Ops activations, all that the web Logs page lists. The radio's own logs stay as they are. Where: Settings > Logbook, and the web configurator, Operating > QRZ. The profiles are the same ones as Field Ops.
+
+- Set up: a callsign and its Logbook API key (QRZ.com, Logbook, Settings), up to three, then switch Upload to QRZ on. Test connection asks that logbook whether the key is accepted, with a key typed on the page before Save. An empty key field keeps the stored key. The key is never shown again.
+- QRZ keeps one logbook per callsign, and a /P or /M callsign is a different logbook, so it needs its own profile. Each QSO goes to the profile whose callsign is the one the radio logged it with (STATION_CALLSIGN, or OPERATOR). A QSO whose callsign has no profile waits, "QRZ: no logbook for KD0CQ/P, 1 QSO waiting", and the others still go; add that profile, then Send now. A key stored with no callsign (an older single key) takes a QSO no named profile claims.
+- From the moment it is switched on: the QSOs logged before are not sent. To send an older log, import its ADIF on QRZ. Switching it off does not throw away QSOs already waiting; they go when it is switched on again.
+- The display says what happened: "QRZ: DL1ABC uploaded", "QRZ: DL1ABC was already there" (QRZ found it as a duplicate), "QRZ: no connection, 2 QSOs waiting". A failure is shown once, on the QSO that met it.
+- Each QSO goes once. The radio tells QSOs apart by the other station, the date and time to the second, the band, the mode and your station callsign: two QSOs with DL1ABC in the same minute, or one as KD0CQ and one as KD0CQ/P, are two, and each goes to its own logbook. A QSO QRZ already has is counted, not sent again and not kept as a failure.
+- Without a network, or behind a WiFi login page, the QSOs wait on the SD card (`/mnt/field/qrzlog.queue`) and go at the next QSO, a minute after the next start, every 5 minutes while some wait for the network, or with Send now on the web page. The queue survives a restart.
+- A QSO QRZ refuses for the record itself (not a duplicate, and not a key or a subscription) goes to `/mnt/field/qrzlog.failed.adi` and is not sent again unless it is edited on the Logs page. A refused key, or a logbook that needs the paid subscription, stops the upload until the key is fixed; the QSOs wait.
+- A QSO edited on the Logs page after it was sent goes again with the next upload. QRZ's upload adds QSOs and changes none it has. When the QSO's call, date, time, band, mode and own callsign are as they were (a report or a name corrected), QRZ keeps its own copy, and the display says "QRZ: DL1ABC was already there, edit it in QRZ too". An edit of any of those reaches QRZ as another QSO. A QSO edited while it waits (no network) goes as it stands then, once; deleted while it waits, it does not go. A QSO deleted on the Logs page after it was sent stays in QRZ.
+- The Field Ops log page can still send a whole activation log by hand (experimental). That upload and this one can both send the same QSO; the second is counted as already there.
+- Uploading needs a QRZ.com Logbook API key, which QRZ.com only gives with a paid QRZ.com subscription (XML level or higher).
+- The keys are kept in `/mnt/field/qrz.conf` (`call1`/`key1` .. `call3`/`key3`, `active`, `autoupload`, `since`), mode 0600. The pages never show a key again and it is not in the Backup, but like the Wavelog, HOTA and WWFF keys it can be downloaded from the Files page by anyone who reaches the web configurator (your LAN, and your tailnet with Tailscale on). The upload is QRZ's logbook API (`https://logbook.qrz.com/api`, ACTION=INSERT). The last result is in `/mnt/field/qrzlog.state`.
+- By hand: `x6100-qrzlog sync`, `x6100-qrzlog test` (one line each, as the other helpers).
 
 ## Winlink
 
@@ -3423,7 +3470,9 @@ The DATA partition, readable on a PC.
 | `psk_macros.txt`, `olivia_macros.txt`, `psk.conf` | PSK and Olivia macros, PSK squelch |
 | `js8_inbox.txt`, `js8_held.txt`, `js8_texts.txt` | JS8 inbox, messages held for others, INFO/STATUS/alert words/groups |
 | `incoming_log.adi` | put an ADIF log here to import it at the next start; a record with neither OPERATOR nor STATION_CALLSIGN is logged under your callsign |
-| `field/` | Field Ops state and activation logs (`field/logs/`) |
+| `field/` | Field Ops state and activation logs (`field/logs/`); QRZ profiles in `field/qrz.conf` (`autoupload=`, `since=`) |
+| `field/qrzlog.queue`, `field/qrzlog.state`, `field/qrzlog.failed.adi` | QSOs waiting for QRZ Logbook, the last upload result, QSOs QRZ refused (see [QRZ Logbook](#qrz-logbook)) |
+| `field/wavelog.queue`, `field/wavelog.state`, `field/wavelog.failed.adi` | the same for Wavelog (see [Wavelog](#wavelog)) |
 | `screenrec/` | screen recordings (AVI) |
 | `themes/` | theme files and folders ([docs/THEMES.md](THEMES.md)) |
 | `sstv/` | received SSTV pictures; `tx_pics/` pictures and `tx_text/` text templates to send |

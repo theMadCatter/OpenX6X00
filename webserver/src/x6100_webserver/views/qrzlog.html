@@ -1,0 +1,135 @@
+% rebase('base.html', title='QRZ')
+<!-- QRZ Logbook auto-upload. Copyright (c) 2026 Chris Fink KD0CQ -->
+<h2><svg class="i"><use href="#i-upload"/></svg>QRZ Logbook</h2>
+<p class="sub">Every QSO the radio logs, in every mode (FT8, FT4, FT2, JS8, voice, CW, Field Ops activations), goes to your <a href="https://www.qrz.com/docs/logbook/QRZLogbookAPI.html">QRZ Logbook</a> as well, a few seconds after it is logged; the radio's own logs stay as they are. Without a network the QSOs wait on the SD card and go when the radio is back online. The display says what happened: "QRZ: DL1ABC uploaded".</p>
+
+<form class="dp-card" id="conf">
+  <div class="dp-head"><span class="dp-ico"><svg class="i"><use href="#i-key"/></svg></span><div><h3>Upload<span class="eff">Takes effect: at the next QSO</span></h3><p>Up to three logbooks, a callsign with its Logbook API key (QRZ.com, Logbook, Settings). QRZ keeps one logbook per callsign, so KD0CQ/P is its own profile. A QSO goes to the profile with the callsign the radio logged it with. Switched on, the QSOs from that moment on are sent, not the log from before<span id="since"></span>. Uploading needs a QRZ.com Logbook API key, which QRZ.com only gives with a paid QRZ.com subscription (XML level or higher). The same profiles are on Field Ops and on the radio, Settings &gt; Logbook.</p></div></div>
+  <div class="dp-row">
+    <div class="dp-lbl"><b>Upload to QRZ</b><span>Each QSO, a few seconds after it is logged</span></div>
+    <div class="dp-ctl"><label class="sw" title="Upload to QRZ"><input id="enabled" type="checkbox" role="switch" aria-label="Upload to QRZ"><i></i></label></div>
+  </div>
+  <div class="dp-row">
+    <div class="dp-lbl"><label for="qcall1"><b>Profile 1</b> <input type="radio" name="qactive" value="1" id="qact1"> active</label><span id="qstate1"></span></div>
+    <div class="dp-ctl"><input id="qcall1" type="text" autocomplete="off" maxlength="16" placeholder="Callsign" style="width:9em;text-transform:uppercase"> <input id="qkey1" type="password" autocomplete="off" maxlength="128" placeholder="New key (empty = keep)"> <button type="button" class="qremove" data-n="1">Remove</button></div>
+  </div>
+  <div class="dp-row">
+    <div class="dp-lbl"><label for="qcall2"><b>Profile 2</b> <input type="radio" name="qactive" value="2" id="qact2"> active</label><span id="qstate2"></span></div>
+    <div class="dp-ctl"><input id="qcall2" type="text" autocomplete="off" maxlength="16" placeholder="Callsign" style="width:9em;text-transform:uppercase"> <input id="qkey2" type="password" autocomplete="off" maxlength="128" placeholder="New key (empty = keep)"> <button type="button" class="qremove" data-n="2">Remove</button></div>
+  </div>
+  <div class="dp-row">
+    <div class="dp-lbl"><label for="qcall3"><b>Profile 3</b> <input type="radio" name="qactive" value="3" id="qact3"> active</label><span id="qstate3"></span></div>
+    <div class="dp-ctl"><input id="qcall3" type="text" autocomplete="off" maxlength="16" placeholder="Callsign" style="width:9em;text-transform:uppercase"> <input id="qkey3" type="password" autocomplete="off" maxlength="128" placeholder="New key (empty = keep)"> <button type="button" class="qremove" data-n="3">Remove</button></div>
+  </div>
+  <div class="dp-body" style="border-top:1px solid #1a283c">
+    <div class="actions" style="margin-top:0">
+      <button type="submit" class="primary">Save</button>
+      <button type="button" id="test">Test connection</button>
+      <span class="status" id="status"></span>
+    </div>
+  </div>
+</form>
+
+<section class="dp-card">
+  <div class="dp-head"><span class="dp-ico"><svg class="i"><use href="#i-upload"/></svg></span><div><h3>Status</h3><p id="state"></p></div></div>
+  <div class="dp-body">
+    <div class="actions" style="margin-top:0">
+      <button type="button" class="primary" id="sync"><svg class="i"><use href="#i-sync"/></svg>Send now</button>
+      <span class="status" id="sstatus"></span>
+    </div>
+  </div>
+</section>
+
+<script src="/static/js/edit_flow.js?v=2"></script>
+<script>
+var showStatus = function(id, text, error=false) {
+  const el = $(id);
+  el.toggleClass("error", error);
+  el.html('<span class="dot"></span>').append(document.createTextNode(text));
+}
+
+var render = function(data) {
+  $("#enabled").prop("checked", data.enabled);
+  data.profiles.forEach(function(p, i) {
+    var n = i + 1;
+    $("#qcall" + n).val(p.call);
+    $("#qkey" + n).val("");
+    $("#qstate" + n).text(p.key ? "key set (hidden)" : "no key");
+    $("#qact" + n).prop("checked", data.active === n).prop("disabled", !p.key);
+    $(".qremove[data-n=" + n + "]").prop("disabled", !p.key);
+  });
+  $("#since").text(data.enabled && data.since ? " (on since " + data.since + ")" : "");
+  renderState(data);
+  form.reset();
+}
+
+var renderState = function(data) {
+  const res = data.last.result || "";
+  const what = res === "ok" ? "nothing new" : res.replace(/^(ok|retry|error) (\d+ )?/, "");
+  $("#state").text((data.queue ? data.queue + " QSO" + (data.queue === 1 ? "" : "s") + " waiting. " : "No QSO waiting. ") +
+                   "Last run: " + (res ? data.last.time + ", " + what : "none yet"));
+  $("#sync").prop("disabled", !data.enabled);
+}
+
+const form = EditFlow.form($("#conf"), $("#status"), $("#conf button[type=submit]"));
+
+var load = function() { $.get('/api/qrzlog', {}, render); }
+load();
+
+var post = function(url, data, done, statusId) {
+  const ms = url === "/api/qrzlog/sync" ? 345000 : 55000;   /* x6100-qrzlog: 330 s for a sync, 40 s for the rest */
+  $.ajax({
+    url: url,
+    type: "POST",
+    data: JSON.stringify(data),
+    contentType: "application/json; charset=utf-8",
+    dataType: "json",
+    timeout: ms,
+    success: done,
+    error: function(xhr, why) { showStatus(statusId, x6100FailText(xhr, why, ms), true); }
+  });
+}
+
+var profiles = function() {
+  return [1, 2, 3].map(function(n) { return {call: $("#qcall" + n).val().trim(), key: $("#qkey" + n).val().trim()}; });
+}
+
+/* No profile stored yet: the row with a key typed, else 1, so Test works before the first Save */
+var activeN = function() {
+  var n = parseInt($("input[name=qactive]:checked").val() || "0", 10);
+  if (n) return n;
+  for (var i = 1; i <= 3; i++) if ($("#qkey" + i).val().trim()) return i;
+  return 1;
+}
+
+$("#test").on("click", function() {
+  const n = activeN();
+  showStatus("#status", "Asking QRZ...");
+  post("/api/qrzlog/test", {profile: n, key: $("#qkey" + n).val().trim()}, function(r) {
+    showStatus("#status", "Connection OK: " + r.logbook);
+  }, "#status");
+});
+
+$("#conf").on("submit", function(e) {
+  e.preventDefault();
+  showStatus("#status", "Saving...");
+  post("/api/qrzlog", {enabled: $("#enabled").prop("checked"), active: activeN(), profiles: profiles()},
+       function(r) { render(r); showStatus("#status", r.enabled ? "Saved: the next QSO goes to QRZ" : "Saved: the upload is off"); }, "#status");
+});
+
+$(".qremove").on("click", function() {
+  const n = $(this).data("n");
+  if (!confirm("Remove profile " + n + " (" + ($("#qcall" + n).val() || "no call") + ") and its key?")) return;
+  post("/api/qrzlog", {remove: parseInt(n, 10)}, function(r) { render(r); showStatus("#status", "Removed"); }, "#status");
+});
+
+$("#sync").on("click", function() {
+  showStatus("#sstatus", "Sending...");
+  post("/api/qrzlog/sync", {}, function(r) {
+    renderState(r);
+    const line = r.result || "";
+    showStatus("#sstatus", line === "ok" ? "Nothing new to send" : line.replace(/^(ok|retry|error|off) ?(\d+ )?/, "") || "The upload is off",
+               /^(retry|error)/.test(line));
+  }, "#sstatus");
+});
+</script>

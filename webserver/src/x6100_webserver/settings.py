@@ -1,4 +1,7 @@
-"""Paths of the radio; __main__ sets the first ones from the command line."""
+"""Paths of the radio; __main__ sets the first ones from the command line.
+
+Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload): QRZLOG_CMD.
+"""
 FILEBROWSER_PATH = "/mnt"           # root of the Files page (--filebrowser-path)
 DB_PATH = ""
 CLUSTER_CONF = "/mnt/cluster.conf"
@@ -18,6 +21,7 @@ CFG_SOCK = "/tmp/x6100_cfg.sock"   # the GUI's configurator socket (src/cfg_sock
 FIELD_DIR = "/mnt/field"            # refs.tsv, qrz.conf, logs/*.adi (rootfs/usr/sbin/x6100-field)
 FIELD_CMD = "x6100-field"
 WAVELOG_CMD = "x6100-wavelog"       # the Wavelog upload (rootfs/usr/sbin), its settings in FIELD_DIR/wavelog.conf
+QRZLOG_CMD = "x6100-qrzlog"         # the QRZ Logbook upload, same directory; profiles in FIELD_DIR/qrz.conf
 HTTPS_PORT = 0                      # set when the HTTPS server runs (the Gallery's in-browser conversion needs it)
 HTTP_PORT = 80                      # the plain server: every other page
 REMOTE_CONF = "/mnt/remote.conf"   # the browser remote (src/remote_server.c): enabled=, port=

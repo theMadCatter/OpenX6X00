@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload)
  */
 
 #include "image_level.h"
@@ -19,6 +20,7 @@
 #include "factory_reset.h"
 #include <vector>
 #include <thread>
+#include <atomic>
 #include <string>
 #include <cstdio>
 #include <cctype>
@@ -47,6 +49,9 @@ extern "C" {
     #include "text_popup.h"
     #include "station.h"
     #include "tci_server.h"
+    #include "dialog_field.h"   /* QRZ upload: kick the helper after the key is saved */
+    #include "cJSON.h"
+    #include "scheduler.h"
     #include "remote_server.h"
     #include "cluster/client.h"
     #include "cluster/spots.h"
@@ -88,6 +93,7 @@ static void make_wireless_page();
 static void make_bluetooth_page();
 static void eth_draft_load();
 static void make_info_page();
+static void make_logbook_page();
 static void make_keys_page();
 static void make_cluster_page();
 static void make_txcal_page();
@@ -137,10 +143,11 @@ static button_data_t btn_cluster   = { .type = BTN_TEXT, .label = "Cluster", .pr
 static button_data_t btn_txcal     = { .type = BTN_TEXT, .label = "TX Cal", .press = tab_press };
 static button_data_t btn_info      = { .type = BTN_TEXT, .label = "Info", .press = tab_press };
 static button_data_t btn_walkie    = { .type = BTN_TEXT, .label = "Walkie", .press = tab_press };
+static button_data_t btn_logbook   = { .type = BTN_TEXT, .label = "Logbook", .press = tab_press };
 
 static buttons_page_t btn_page   = {{&btn_p1, &btn_general, &btn_display, &btn_audio, &btn_wireless}};
 static buttons_page_t btn_page_2 = {{&btn_p2, &btn_bluetooth, &btn_keys, &btn_cluster, &btn_txcal}};
-static buttons_page_t btn_page_3 = {{&btn_p3, &btn_info, &btn_walkie}};
+static buttons_page_t btn_page_3 = {{&btn_p3, &btn_info, &btn_walkie, &btn_logbook}};
 static buttons_page_t *btn_pages[] = {&btn_page, &btn_page_2, &btn_page_3};
 
 static dialog_t dialog = {
@@ -167,6 +174,7 @@ static const struct {
     {&btn_bluetooth, make_bluetooth_page, "bluetooth"}, {&btn_keys, make_keys_page, "keys"},
     {&btn_cluster, make_cluster_page, "cluster"},   {&btn_txcal, make_txcal_page, "txcal"},
     {&btn_info, make_info_page, "info"},            {&btn_walkie, make_walkie_page, "walkie"},
+    {&btn_logbook, make_logbook_page, "logbook"},
 };
 
 /* Left rail: the tabs of all button pages, numbered, the current one marked */
@@ -3086,6 +3094,419 @@ static void make_general_page() {
     card_end(row);
     wv_update();
     wv_timer = lv_timer_create(wv_timer_cb, 1000, NULL);   /* deleted by st_delete_cb */
+}
+
+/* QRZ Logbook auto-upload. The key lives in /mnt/field/qrz.conf with the Field Ops profiles
+ * (call1/key1 .. call3/key3, autoupload, since), mode 0600, and is never shown again.
+ * x6100-qrzlog sends each new QSO; dialog_field_logup_kick runs it without blocking here. */
+
+#ifndef FIELD_DIR
+#define FIELD_DIR BOARD_DATA "/field"
+#endif
+#define QRZ_CONF     FIELD_DIR "/qrz.conf"
+#define QRZ_SLOTS    3
+
+typedef struct {
+    int    active;                 /* 1..QRZ_SLOTS */
+    bool   upload;
+    time_t since;
+    char   call[QRZ_SLOTS][20];
+    char   key[QRZ_SLOTS][129];
+} qrzset_t;
+
+static qrzset_t     qrz_cfg;
+static int          qrz_kbd;       /* 1 call of the active profile, 2 its API key */
+static lv_obj_t    *qrz_status;
+static std::atomic_bool qrz_testing;
+
+static bool qrz_call_ok(const char *s) {
+    size_t n = strlen(s);
+
+    if (n < 1 || n > 16)
+        return false;
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (!isalnum(c) && c != '/' && c != '-')
+            return false;
+    }
+    return true;
+}
+
+/* The same rule as the web page: 1-128 printable characters, no spaces */
+static bool qrz_key_ok(const char *s) {
+    size_t n = strlen(s);
+
+    if (n < 1 || n > 128)
+        return false;
+    for (size_t i = 0; i < n; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c <= 0x20 || c >= 0x7f)
+            return false;
+    }
+    return true;
+}
+
+static bool qrz_any_key(const qrzset_t *c) {
+    for (int i = 0; i < QRZ_SLOTS; i++)
+        if (c->key[i][0])
+            return true;
+    return false;
+}
+
+static void qrzset_read(qrzset_t *c) {
+    char  line[320];
+    char  legacy[129] = "";
+    FILE *f;
+
+    memset(c, 0, sizeof(*c));
+    c->active = 1;
+    f = fopen(QRZ_CONF, "r");
+    if (!f)
+        return;
+    while (fgets(line, sizeof(line), f)) {
+        char *v = strchr(line, '=');
+        int   n = 0;
+
+        if (!v)
+            continue;
+        *v++ = 0;
+        v[strcspn(v, "\r\n")] = 0;
+        if (!strcmp(line, "active"))
+            c->active = atoi(v);
+        else if (!strcmp(line, "autoupload"))
+            c->upload = !strcmp(v, "1");
+        else if (!strcmp(line, "since"))
+            c->since = (time_t)atoll(v);
+        else if (!strcmp(line, "key"))
+            snprintf(legacy, sizeof(legacy), "%s", v);
+        else if (sscanf(line, "call%d", &n) == 1 && n >= 1 && n <= QRZ_SLOTS)
+            snprintf(c->call[n - 1], sizeof(c->call[0]), "%s", v);
+        else if (sscanf(line, "key%d", &n) == 1 && n >= 1 && n <= QRZ_SLOTS)
+            snprintf(c->key[n - 1], sizeof(c->key[0]), "%s", v);
+    }
+    fclose(f);
+    if (!qrz_any_key(c) && legacy[0])
+        snprintf(c->key[0], sizeof(c->key[0]), "%s", legacy);
+    if (c->active < 1 || c->active > QRZ_SLOTS || !c->key[c->active - 1][0]) {
+        c->active = 1;
+        for (int i = 0; i < QRZ_SLOTS; i++)
+            if (c->key[i][0]) {
+                c->active = i + 1;
+                break;
+            }
+    }
+}
+
+/* The whole file, so a Field Ops profile and autoupload are never written apart */
+static bool qrzset_write(const qrzset_t *c) {
+    char tmp[160];
+    int  fd, active = c->active;
+
+    if (mkdir(FIELD_DIR, 0755) != 0 && errno != EEXIST)
+        return false;
+    if (active < 1 || active > QRZ_SLOTS || !c->key[active - 1][0]) {
+        active = 1;
+        for (int i = 0; i < QRZ_SLOTS; i++)
+            if (c->key[i][0]) {
+                active = i + 1;
+                break;
+            }
+    }
+    snprintf(tmp, sizeof(tmp), "%s.tmp", QRZ_CONF);
+    fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
+    if (fd < 0)
+        return false;
+    fchmod(fd, 0600);   /* umask must not leave the API key group-readable */
+    FILE *f = fdopen(fd, "w");
+    if (!f) {
+        close(fd);
+        return false;
+    }
+    fprintf(f, "active=%d\n", active);
+    for (int i = 0; i < QRZ_SLOTS; i++)
+        if (c->key[i][0])
+            fprintf(f, "call%d=%s\nkey%d=%s\n", i + 1, c->call[i], i + 1, c->key[i]);
+    if (c->upload)
+        fprintf(f, "autoupload=1\n");
+    if (c->since > 0)
+        fprintf(f, "since=%lld\n", (long long)c->since);
+    fflush(f);
+    fsync(fd);
+    fclose(f);
+    return rename(tmp, QRZ_CONF) == 0;
+}
+
+static void qrz_status_refresh(void) {
+    char    path[160], buf[4096], text[160];
+    cJSON  *root, *last, *result;
+    int     queued = 0;
+    FILE   *f;
+
+    if (!qrz_status)
+        return;
+    snprintf(path, sizeof(path), FIELD_DIR "/qrzlog.queue");
+    f = fopen(path, "r");
+    if (f) {
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        fclose(f);
+        buf[n] = 0;
+        root = cJSON_Parse(buf);
+        if (cJSON_IsArray(root))
+            queued = cJSON_GetArraySize(root);
+        cJSON_Delete(root);
+    }
+    snprintf(text, sizeof(text), queued ? "%d waiting" : "nothing waiting", queued);
+    snprintf(path, sizeof(path), FIELD_DIR "/qrzlog.state");
+    f = fopen(path, "r");
+    if (f) {
+        size_t n = fread(buf, 1, sizeof(buf) - 1, f);
+        fclose(f);
+        buf[n] = 0;
+        root = cJSON_Parse(buf);
+        last = cJSON_GetObjectItem(root, "last");
+        result = cJSON_GetObjectItem(last, "result");
+        if (cJSON_IsString(result) && result->valuestring[0]) {
+            const char *s = result->valuestring;
+            if (!strncmp(s, "ok ", 3) || !strncmp(s, "retry ", 6) || !strncmp(s, "error ", 6)) {
+                const char *sp = strchr(s, ' ');
+                if (sp && (!strncmp(s, "ok ", 3) || !strncmp(s, "retry ", 6)))
+                    sp = strchr(sp + 1, ' ');
+                if (sp)
+                    s = sp + 1;
+            }
+            /* text is the queue line already; do not pass it as both source and destination */
+            if (queued)
+                snprintf(text, sizeof(text), "%d waiting. %s", queued, s);
+            else
+                snprintf(text, sizeof(text), "Last: %s", s);
+        }
+        cJSON_Delete(root);
+    }
+    lv_label_set_text(qrz_status, text);
+}
+
+static void qrz_delete_cb(lv_event_t *e) {
+    qrz_status = NULL;
+    if (qrz_kbd) {
+        qrz_kbd = 0;
+        textarea_window_close();
+    }
+}
+
+static bool qrz_kbd_close(void) {
+    qrz_kbd = 0;
+    textarea_window_close();
+    make_logbook_page();
+    return true;
+}
+
+static bool qrz_kbd_ok(void) {
+    const char *val = textarea_window_get() ? textarea_window_get() : "";
+    char        buf[160];
+    int         slot;
+
+    snprintf(buf, sizeof(buf), "%s", val);
+    if (qrz_kbd == 1) {
+        for (char *p = buf; *p; p++)
+            *p = toupper((unsigned char)*p);
+        if (!buf[0])
+            return qrz_kbd_close();
+        if (!qrz_call_ok(buf)) {
+            msg_update_text_fmt("A call is letters, digits, / and -");
+            return false;
+        }
+        slot = 0;
+        for (int i = 0; i < QRZ_SLOTS; i++)
+            if (qrz_cfg.key[i][0] && !strcmp(qrz_cfg.call[i], buf))
+                slot = i + 1;
+        if (slot) {
+            qrz_cfg.active = slot;   /* that logbook is already stored */
+        } else {
+            int cur = qrz_cfg.active >= 1 && qrz_cfg.active <= QRZ_SLOTS ? qrz_cfg.active - 1 : 0;
+            int dest = !qrz_cfg.key[cur][0] ? cur : -1;
+            if (dest < 0)
+                for (int i = 0; i < QRZ_SLOTS; i++)
+                    if (!qrz_cfg.key[i][0]) {
+                        dest = i;
+                        break;
+                    }
+            if (dest < 0)
+                dest = cur;   /* three profiles already: this call takes the active one's place */
+            snprintf(qrz_cfg.call[dest], sizeof(qrz_cfg.call[0]), "%s", buf);
+            qrz_cfg.active = dest + 1;
+        }
+    } else {
+        if (!buf[0]) {
+            msg_update_text_fmt("Nothing typed: the stored key stays");
+            return qrz_kbd_close();
+        }
+        if (!qrz_key_ok(buf)) {
+            msg_update_text_fmt("A key is 1-128 characters, no spaces");
+            return false;
+        }
+        slot = qrz_cfg.active >= 1 && qrz_cfg.active <= QRZ_SLOTS ? qrz_cfg.active - 1 : 0;
+        /* %.128s / %.16s: the checks above already reject a longer value, and the
+         * destination is one byte larger. A plain %s warned, the source is wider. */
+        snprintf(qrz_cfg.key[slot], sizeof(qrz_cfg.key[0]), "%.128s", buf);
+        if (!qrz_cfg.call[slot][0] && qrz_call_ok(params.callsign.x))
+            snprintf(qrz_cfg.call[slot], sizeof(qrz_cfg.call[0]), "%.16s", params.callsign.x);
+        for (char *p = qrz_cfg.call[slot]; *p; p++)
+            *p = toupper((unsigned char)*p);
+        qrz_cfg.active = slot + 1;
+    }
+    if (!qrzset_write(&qrz_cfg)) {
+        msg_update_text_fmt("QRZ settings not saved");
+        return false;
+    }
+    dialog_field_logup_kick();
+    return qrz_kbd_close();
+}
+
+static void qrz_kbd_open(int which) {
+    int slot = qrz_cfg.active >= 1 && qrz_cfg.active <= QRZ_SLOTS ? qrz_cfg.active - 1 : 0;
+
+    qrz_kbd = which;
+    lv_group_remove_all_objs(keyboard_group);
+    textarea_window_open(qrz_kbd_ok, qrz_kbd_close);
+    lv_textarea_set_max_length(textarea_window_text(), which == 1 ? 16 : 128);
+    if (which == 1) {
+        lv_textarea_set_accepted_chars(textarea_window_text(),
+                                       "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789/-");
+        lv_textarea_set_placeholder_text(textarea_window_text(), " Callsign");
+        textarea_window_set(qrz_cfg.call[slot]);
+    } else {
+        /* The stored key is not put back on screen */
+        lv_textarea_set_placeholder_text(textarea_window_text(), " API key");
+        textarea_window_set("");
+    }
+}
+
+static void qrz_call_cb(lv_event_t *e) {
+    qrz_kbd_open(1);
+}
+
+static void qrz_key_cb(lv_event_t *e) {
+    qrz_kbd_open(2);
+}
+
+static void qrz_upload_cb(lv_event_t *e) {
+    lv_obj_t *sw = lv_event_get_target(e);
+    bool      on = lv_obj_has_state(sw, LV_STATE_CHECKED);
+
+    if (on && !qrz_any_key(&qrz_cfg)) {
+        lv_obj_clear_state(sw, LV_STATE_CHECKED);
+        msg_update_text_fmt("Add the QRZ API key first");
+        return;
+    }
+    if (on && !qrz_cfg.upload)
+        qrz_cfg.since = time(NULL);   /* from now: the log from before is not sent */
+    qrz_cfg.upload = on;
+    if (!qrzset_write(&qrz_cfg)) {
+        msg_update_text_fmt("QRZ settings not saved");
+        return;
+    }
+    dialog_field_logup_kick();
+    msg_update_text_fmt(on ? "QRZ upload on: the next QSO goes" : "QRZ upload off");
+}
+
+static void qrz_remove_cb(lv_event_t *e) {
+    int slot = qrz_cfg.active >= 1 && qrz_cfg.active <= QRZ_SLOTS ? qrz_cfg.active - 1 : 0;
+
+    if (!qrz_cfg.key[slot][0]) {
+        msg_update_text_fmt("No QRZ key stored");
+        return;
+    }
+    qrz_cfg.call[slot][0] = qrz_cfg.key[slot][0] = 0;
+    if (!qrz_any_key(&qrz_cfg))
+        qrz_cfg.upload = false;
+    else
+        for (int i = 0; i < QRZ_SLOTS; i++)
+            if (qrz_cfg.key[i][0]) {
+                qrz_cfg.active = i + 1;
+                break;
+            }
+    if (!qrzset_write(&qrz_cfg)) {
+        msg_update_text_fmt("QRZ settings not saved");
+        return;
+    }
+    msg_update_text_fmt("QRZ key removed");
+    make_logbook_page();   /* the keyboard is not open on this button */
+}
+
+static void qrz_test_done(void *arg) {
+    const char *line = (const char *)arg;
+    const char *text = strchr(line, ' ');
+
+    qrz_testing = false;
+    msg_schedule_long_text_fmt("%s", text ? text + 1 : line);
+    qrz_status_refresh();
+}
+
+static void qrz_test_cb(lv_event_t *e) {
+    if (!qrz_any_key(&qrz_cfg)) {
+        msg_update_text_fmt("Add the QRZ API key first");
+        return;
+    }
+    if (qrz_testing.exchange(true))
+        return;
+    msg_update_text_fmt("Asking QRZ...");
+    std::thread([] {
+        char  line[160];
+        FILE *p;
+
+        snprintf(line, sizeof(line), "error QRZ: no answer");
+        p = popen("x6100-qrzlog test 2>/dev/null", "r");
+        if (p) {
+            if (!fgets(line, sizeof(line), p))
+                snprintf(line, sizeof(line), "error QRZ: no answer");
+            pclose(p);
+        }
+        line[strcspn(line, "\r\n")] = 0;
+        if (!scheduler_put(qrz_test_done, line, strlen(line) + 1))
+            qrz_testing = false;
+    }).detach();
+}
+
+static void make_logbook_page(void) {
+    int     slot;
+    uint8_t row;
+
+    qrzset_read(&qrz_cfg);
+    grid_create();
+    row = card_begin("QRZ LOGBOOK");
+    wl_row_label(row, "Upload to QRZ");
+    row_switch(row, 4, 3, SMALL_3, qrz_cfg.upload, qrz_upload_cb, NULL);
+    lv_label_set_text(wl_note(row), "Each QSO, a few seconds later");
+    row++;
+
+    slot = qrz_cfg.active >= 1 && qrz_cfg.active <= QRZ_SLOTS ? qrz_cfg.active - 1 : 0;
+    wl_row_label(row, "Logbook call");
+    wl_button(row, qrz_cfg.call[slot][0] ? qrz_cfg.call[slot] : "none", qrz_call_cb);
+    lv_label_set_text(wl_note(row), "/P is its own logbook");
+    row++;
+
+    wl_row_label(row, "API key");
+    wl_button(row, qrz_cfg.key[slot][0] ? "set" : "not set", qrz_key_cb);
+    lv_label_set_text(wl_note(row), "Hidden once saved");
+    row++;
+
+    wl_row_label(row, "Key");
+    wl_button(row, "Remove", qrz_remove_cb);
+    {
+        lv_obj_t *b = wl_button(row, "Test", qrz_test_cb);
+        lv_obj_set_grid_cell(b, LV_GRID_ALIGN_START, 4, 3, LV_GRID_ALIGN_CENTER, row, 1);
+    }
+    row++;
+
+    wl_row_label(row, "Status");
+    qrz_status = wl_label(grid, SF(20), theme_hex(TC_text_dim), 0);
+    lv_obj_set_width(qrz_status, SMALL_6);
+    lv_label_set_long_mode(qrz_status, LV_LABEL_LONG_DOT);
+    lv_obj_set_grid_cell(qrz_status, LV_GRID_ALIGN_START, 1, 6, LV_GRID_ALIGN_CENTER, row, 1);
+    qrz_status_refresh();
+    row++;
+    card_end(row);
+    lv_obj_add_event_cb(grid, qrz_delete_cb, LV_EVENT_DELETE, NULL);
 }
 
 /* The Walkie Talkie screen: on (Settings closes, the portrait screen comes up), its knob, its mic */

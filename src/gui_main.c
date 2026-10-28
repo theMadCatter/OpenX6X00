@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ (QRZ Logbook auto-upload)
  *
  *  Start: the screen, the input devices, the settings, the radio and the services in the
  *  order they need each other, then the GUI loop.
@@ -374,7 +375,7 @@ int main(void) {
     if (!database_version_fault()) {
         lv_timer_set_repeat_count(lv_timer_create(update_confirm_cb, 60000, NULL), 1);
     }
-    dialog_field_wavelog_start();
+    dialog_field_logup_start();
     gui_loop();
     return 0;
 }

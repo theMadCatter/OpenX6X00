@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Chris Fink KD0CQ
+
 #pragma once
 
 // C-compatible API for the SettingsManager's parameters (Stage B). This header
@@ -73,6 +75,8 @@ extern ParamInt         *cfg_walkie_mem;         // p_walkie_mem
 extern ParamInt         *cfg_walkie_ch;          // p_walkie_ch
 extern ParamInt         *cfg_walkie_mic;         // p_walkie_mic
 extern ParamInt         *cfg_band_plan;          // p_band_plan
+extern ParamInt         *cfg_band_plan_sel;      // p_band_plan_sel (0 Auto, 1 R1, 2 R2, 3 R3, 4 USA)
+extern ParamInt         *cfg_band_plan_class;    // p_band_plan_class (0 Extra .. 4 Novice), USA plan only
 extern ParamInt         *cfg_wr12;               // p_wr12 (the X6200: the WR12 on HOST)
 extern ParamInt         *cfg_speaker_off;        // p_speaker_off
 extern ParamInt         *cfg_smeter_needle;      // p_smeter_needle

@@ -2,11 +2,15 @@
  *  SPDX-License-Identifier: LGPL-2.1-or-later
  *
  *  DX cluster spots: line parser, spot store, band and mode helpers.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE /* strcasestr */
 
 #include "spots.h"
+
+#include "../band_plan_data.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -232,6 +236,14 @@ static const int32_t digi_khz[] = {
     18100, 18104, 21074, 21140, 24915, 24919, 28074, 28180, 50313, 50318,
 };
 
+/* The strip's band_plan_type, or NULL. NULL keeps the Region 1 edges below: this file is
+ * tested without the GUI, and the hook is installed only once the strip has loaded a plan. */
+static int (*plan_at)(int32_t freq);
+
+void cluster_set_band_plan(int (*fn)(int32_t freq)) {
+    plan_at = fn;
+}
+
 cluster_mode_t cluster_guess_mode(const cluster_spot_t *spot) {
     const char *c    = spot->comment;
     int32_t     hz   = spot->freq_hz;
@@ -248,10 +260,26 @@ cluster_mode_t cluster_guess_mode(const cluster_spot_t *spot) {
     if (has_word(c, "AM")) return CLUSTER_MODE_AM;
     if (has_word(c, "FM")) return CLUSTER_MODE_FM;
 
+    /* Known digi dials first. Some of them sit inside an all-modes segment (7074 in Region 1),
+     * and the comment is empty on a bare spot, so the frequency is the only clue. */
     for (size_t i = 0; i < sizeof(digi_khz) / sizeof(digi_khz[0]); i++)
         if (abs(hz - digi_khz[i] * 1000) <= 3000) return CLUSTER_MODE_DIGI;
-    for (size_t i = 0; i < sizeof(cw_segments) / sizeof(cw_segments[0]); i++)
-        if (hz >= cw_segments[i].low && hz < cw_segments[i].high) return CLUSTER_MODE_CW;
+
+    if (plan_at) {
+        int t = plan_at(hz);
+
+        /* Beacon guards are CW in practice. A phone segment on 10 m still has the FM calling
+         * range the old guess used. Between segments, fall through to the 30 m and 10 m rules. */
+        if (t == BP_CW || t == BP_BCN) return CLUSTER_MODE_CW;
+        if (t == BP_DIG) return CLUSTER_MODE_DIGI;
+        if (t == BP_ALL) {
+            if (hz >= 29510000 && hz <= 29700000) return CLUSTER_MODE_FM;
+            return high ? CLUSTER_MODE_USB : CLUSTER_MODE_LSB;
+        }
+    } else {
+        for (size_t i = 0; i < sizeof(cw_segments) / sizeof(cw_segments[0]); i++)
+            if (hz >= cw_segments[i].low && hz < cw_segments[i].high) return CLUSTER_MODE_CW;
+    }
     if (hz >= 10100000 && hz <= 10150000) return CLUSTER_MODE_CW; /* 30m: no SSB */
     if (hz >= 29510000 && hz <= 29700000) return CLUSTER_MODE_FM;
     return high ? CLUSTER_MODE_USB : CLUSTER_MODE_LSB;

@@ -364,10 +364,63 @@ Over the waterfall. Where: Settings > Display > MAIN SCREEN.
 | Cluster spots | the DX cluster calls at their frequencies (see [DX Cluster](#dx-cluster)) |
 | Cluster column | the spot list in a box on the right |
 
-The band plan strip shows the IARU Region 1 segments (160 m to 6 m, 60 m as
-WRC-15). A band of the band list the IARU plan does not cover (one added on
-the web configurator's Bands page, the top of 6 m, 4 m, 2 m) gets a strip
-too, typed from its name: CW in the name makes a CW segment, DIG, FT8, FT4 or
+The band plan strip shows the plan chosen under Band plan region, on this
+card and on the web configurator's Display page. Auto, the default, reads
+the station callsign. K, N, W and AA-AL (KH6, KL7, KP4 and the other K
+prefixes included) use the USA plan. Another known prefix uses that prefix's
+ITU region. An empty callsign, or one the table does not recognise, stays on
+Region 1, which is what a radio with no callsign showed before there was a
+choice. A callsign already saved from outside Region 1 changes the strip on
+upgrade; choose Region 1 to keep the old one whatever the callsign says.
+
+Region 1 is the plan the radio shipped with: 160 m to 6 m, 60 m as WRC-15,
+6 m stopping at 52 MHz. Region 2 runs 80 m to 4 MHz, 40 m to 7.3 MHz and 6 m
+to 54 MHz. Region 3 stops 80 m at 3.9 MHz and 40 m at 7.2 MHz (7.2-7.3 is not
+an amateur allocation in that plan).
+
+The USA plan is FCC Part 97 for the continental United States: 97.301 for the
+frequencies a class may use, 97.305 for the emissions. US license class, on
+this card and on the web configurator's Display page, is Extra, Advanced,
+General, Technician or Novice. Extra is the default, so the strip stays as it
+was until a class is chosen. The row is there only while the USA plan is in
+use (the setting is USA, or Auto and the station callsign is a US call).
+Chris Fink KD0CQ, who added these plans, holds Advanced. The stored default
+is still Extra.
+
+Tuning and receiving stay unrestricted on every frequency, for every class.
+Transmitting stays available too. The class changes the strip and the warning
+colour, and the operator is responsible for the transmission, including MARS,
+CAP and emergency traffic. Broadcast, the airband and the WR12 receiver stay
+receive-only in the hardware, the same as before this setting existed.
+
+Where the class has no privilege the strip is blank. The transmit frequency
+turns the warning colour when it is an amateur frequency outside that class:
+the VFO label, the frequency digits (in split, the transmit frequency, while
+the frequency being received stays in the ordinary colour) and the frequency
+on the TX meter. WWV, a shortwave broadcast, or any frequency these tables do
+not know as amateur stays in the ordinary colour.
+
+Advanced phone on 40 m starts at 7.125 MHz, the same edge as Extra.
+14.150-14.175 and 21.200-21.225 are blank. General phone starts at 7.175 on
+40 m, 14.225 on 20 m and 21.275 on 15 m, and 7.125-7.175 is blank. Technician
+and Novice share the HF CW subbands 3.525-3.600, 7.025-7.125 and
+21.025-21.200, and 10 m phone from 28.300 to 28.500. Novice has no 6 m.
+Above 6 m the strip still comes from the band list. The warning follows
+97.301, so 2 m warns for Novice and stays ordinary for Technician.
+
+Continental Extra phone on 40 m starts at 7.125 MHz (phone from 7.075 is the
+exception in 97.307(f)(11), for FCC stations in Regions 1 and 3 and in Region
+2 west of 130 degrees west or south of 20 degrees north). 160 m phone in the
+Extra, Advanced and General plans is the on-air split, because the FCC
+authorizes phone on the whole band. 60 m follows the channel and segment list
+read from the eCFR on 28 October 2026; that allocation changed during 2026,
+so confirm the current rule before relying on a channel. Hiding the strip
+leaves the plan in use: Mode from band plan and the CW line still follow it.
+Outside a class's segments the mode stays where the operator left it.
+
+A band of the band list the selected plan does not cover (one added on the
+web configurator's Bands page, the top of 6 m, 4 m, 2 m) gets a strip too,
+typed from its name: CW in the name makes a CW segment, DIG, FT8, FT4 or
 DATA a digital one, BCN a beacon one, anything else all modes. "60m CW" at
 5.2585 MHz is a CW segment, so the main screen's
 [CW line](#cw-from-the-keyboard) works there. Broadcast and CB
@@ -507,7 +560,7 @@ base is too old.
 
 | Card | Options |
 |---|---|
-| STATION | callsign, QTH locator, Mode from band plan (the knob turned into another band plan segment sets its mode: CW in a CW segment, the band's sideband in a phone segment; SSB and CW only), Independent VFOs (VFO A and VFO B each keep their own band, frequency and mode: the VFO key brings the other one's band back, A=B copies everything to the other VFO; off, both VFOs live in the current band) |
+| STATION | callsign, QTH locator, Mode from band plan (the knob turned into another segment of the selected plan sets its mode: CW in a CW segment, the band's sideband in a phone segment; SSB and CW only; the plan is Band plan region on the Display tab), Independent VFOs (VFO A and VFO B each keep their own band, frequency and mode: the VFO key brings the other one's band back, A=B copies everything to the other VFO; off, both VFOs live in the current band) |
 | DATE / TIME | date, time, time zone |
 | CONTROLS | Freq acceleration, Accel. onset, Charger (Off, On, Shadow), Per band S-meter cal, TX shift of the band the radio is on (see [TX shift](#tx-shift)), Walkie Talkie (see [Walkie Talkie mode](#walkie-talkie-mode)) |
 | TRANSVERTERS | two transverters: from, to, shift in MHz; a shift of 0 is off (the X6200's default, see [WR12 receiver](#wr12-receiver-x6200)) |
@@ -567,7 +620,7 @@ Per band S-meter cal: see [S-meter](#s-meter). TCI SERVER: see
 | BACKLIGHT | timeout and brightness, buttons brightness (Always Off, Always On, Temporarily On), Screen off (min) (minutes without a key or knob, 0 never; the key that wakes it does nothing else), Screen always off (the screen stays dark for a radio run from the VFO-Knob or a browser; POWER shows it for the blank time, a minute at least) |
 | SPECTRUM | Spectrum; with it on Fill, Peaks, Fill gradient, Filter colour, Height (see [Waterfall](#waterfall)) |
 | WATERFALL | see [Waterfall](#waterfall) |
-| MAIN SCREEN | Band plan, Cluster spots, Cluster column, Broadcast names, S-meter type, S-meter colours, Needle lamp, Birdies (see [Birdie Cal](#birdie-cal)), Zoom and step per mode (see [Waterfall](#waterfall)) |
+| MAIN SCREEN | Band plan, Band plan region (Auto, Region 1, Region 2, Region 3, USA; see [Waterfall](#waterfall)), US license class (Extra, Advanced, General, Technician, Novice; only while the USA plan is in use), Cluster spots, Cluster column, Broadcast names, S-meter type, S-meter colours, Needle lamp, Birdies (see [Birdie Cal](#birdie-cal)), Zoom and step per mode (see [Waterfall](#waterfall)) |
 | INTERFACE | Popups Freq/Info/ALC, Icon menus, Knob info, Theme, Font, Decoder text, FT8/FT4 info |
 
 - Popups Freq/Info/ALC: a big frequency while tuning, a big value of the
@@ -1694,7 +1747,7 @@ Cluster app (APP > Cluster; pages `(CLUSTER 1:2)` and `(CLUSTER 2:2)`):
   green `*` marks spots less than 2 minutes old.
 - Turning the MFK browses the list (this stops the VFO following). An MFK
   press or the Tune button tunes to the spot. The mode comes
-  from the comment (CW, FT8, SSB, ...) or else from the band plan: CW, USB-D
+  from the comment (CW, FT8, SSB, ...) or else from the band plan the radio is using: CW, USB-D
   on the FT8/FT4 frequencies, LSB below 10 MHz, USB above.
 - Page 1: Band / All switches between the current band and all bands (always
   all when the VFO is outside the amateur bands); the button shows the view
@@ -2334,7 +2387,7 @@ applied on the radio as you change them.
 | Theme | Theme (the radio's screen restarts with the new one) |
 | S-meter | S-meter type (Bars, Needle), Colours (Theme, Scale, Level), Needle lamp; with a preview |
 | Waterfall | Mode (Centered, Fixed), Speed (1-5), Auto level, Auto level offset (-15 to +15 dB), Center line, Zoom, Smooth scroll |
-| On the waterfall | Band plan, Cluster spots, Cluster column |
+| On the waterfall | Band plan, Band plan region (Auto, Region 1, Region 2, Region 3, USA; see [Waterfall](#waterfall)), US license class (Extra, Advanced, General, Technician, Novice; only while the USA plan is in use), Cluster spots, Cluster column |
 | Backlight | Brightness, Brightness when idle, Idle after (5-120 s), Button lights (Always off, Always on, Temporarily on), Screen off after (0-120 min), Screen always off |
 | Receiver | the X6200 only: WR12 on HOST (see [WR12 receiver](#wr12-receiver-x6200)) |
 | Text and info | Independent VFOs, Birdies (Off, Marks, Marks + notch), Mode from band plan, Zoom and step per mode (see [Waterfall](#waterfall)), Icon menus, Knob info, Decoder text (Large, Compact), Magnify frequency, Magnify info, Magnify ALC |
@@ -2511,7 +2564,7 @@ web page, nothing to install, any device with a browser.
 
 - The spectrum and the waterfall, live from the radio's own FFT (a kilobyte a
   frame, fifteen a second: a tenth of the Screen page's bandwidth), with the
-  frequency scale, the IARU band plan strip, the VFO line and the passband.
+  frequency scale, the band plan strip (the plan selected on the radio), the VFO line and the passband.
   Tap or drag to tune, pinch (or Ctrl + the mouse wheel) to zoom, the wheel
   to tune by the step. Colours: Blue, Fire, Ice, Grey.
 - The frequency: tap it for a keypad (kHz). BAND up and down, MODE, STEP,
@@ -2574,7 +2627,7 @@ The page talks to the GUI's remote WebSocket (port 50002, the Screen page's):
 `panel 1` subscribes to the state (`state {...}` as JSON: frequency, mode,
 filter, the switches and the levels, whenever something changes), the
 S-meter (`m <dB>`, ten a second), the TX meters (`t <W> <SWR> <ALC>`), the
-bands and the band plan (`bands`, `plan`), the spots (`spots [...]`) and the
+bands and the band plan (`bands`, `plan`, sent again when the plan changes), the spots (`spots [...]`) and the
 spectrum as binary frames (16 bytes header `{u16 0xFFFF, u16 bins, u32
 centre Hz, u32 width Hz, u32 sequence}`, then one int8 dB per bin). `set NAME
 VALUE` changes the radio: `freq`, `mode` (0-7, the order of the mode list),

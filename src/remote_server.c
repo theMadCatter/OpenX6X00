@@ -39,7 +39,8 @@
  *  The Panel page works the radio natively instead of through a picture of its screen: a client
  *  that sends "panel 1" gets the radio's state as JSON ("state {...}": frequency, mode, filter,
  *  the switches, the levels), the S-meter ("m <dB>", ten a second), the TX meters while on the
- *  air ("t <W> <SWR> <ALC>"), the band list and the band plan once ("bands [...]", "plan [...]"),
+ *  air ("t <W> <SWR> <ALC>"), the band list once ("bands [...]") and the band plan ("plan [...]",
+ *  again when the selected plan changes),
  *  the cluster spots as they change ("spots [...]") and the spectrum as binary frames: 16 bytes
  *  header {u16 0xFFFF, u16 bins, u32 centre Hz, u32 width Hz, u32 sequence}, then one int8 dB
  *  per bin (the waterfall's own FFT, up to 15 a second, a kilobyte each where a screen frame is
@@ -63,6 +64,7 @@
  *  is no login: the radio's own network is trusted.
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE     /* accept4, pipe2 */
@@ -901,11 +903,34 @@ static void panel_broadcast(const char *s) {
             client_text(&clients[i], s);
 }
 
+/* "plan [[start Hz, end Hz, type], ...]": the strip in use, user bands included. end is exclusive.
+ * The buffer belongs to the caller. panel_hello and a later reload run on different threads. */
+static void plan_message(char *buf, size_t n) {
+    size_t  k = snprintf(buf, n, "plan [");
+    int32_t a, b;
+    int     type;
+
+    for (int i = 0; band_plan_segment(i, &a, &b, &type) && k < n - 48; i++)
+        k += snprintf(buf + k, n - k, "%s[%d,%d,%d]", i ? "," : "", a, b, type);
+    snprintf(buf + k, n - k, "]");
+}
+
+/* LVGL thread, from band_plan_reload. Nothing is listening until a client has subscribed,
+ * and npanel is 0 before remote_server_init, so the call is safe at startup. */
+void remote_server_band_plan(void) {
+    static char buf[8192];     /* a full plan plus the bands the list adds: a segment is ~30 bytes */
+
+    if (!atomic_load(&npanel))
+        return;
+    plan_message(buf, sizeof(buf));
+    panel_broadcast(buf);
+}
+
 /* The bands and the band plan: to one client, when it subscribes */
 static void panel_hello(client_t *c) {
     static int32_t start[32], stop[32];
     static char    names[32][16];
-    static char    buf[4096];       /* the plan with bands of the band list added: more than 2 KB */
+    static char    buf[8192];       /* the plan with bands of the band list added */
     size_t         k = 0;
 
     client_textf(c, "modes %d", radio_caps() & HW_CAP_SAM_WFM ? radio_mode_last + 1 : radio_mode_sam);
@@ -920,12 +945,7 @@ static void panel_hello(client_t *c) {
     snprintf(buf + k, sizeof(buf) - k, "]");
     client_text(c, buf);
 
-    k = snprintf(buf, sizeof(buf), "plan [");
-    int32_t a, b;
-    int     type;
-    for (int i = 0; band_plan_segment(i, &a, &b, &type) && k < sizeof(buf) - 48; i++)
-        k += snprintf(buf + k, sizeof(buf) - k, "%s[%d,%d,%d]", i ? "," : "", a, b, type);
-    snprintf(buf + k, sizeof(buf) - k, "]");
+    plan_message(buf, sizeof(buf));
     client_text(c, buf);
 }
 

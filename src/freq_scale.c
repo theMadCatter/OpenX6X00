@@ -3,6 +3,8 @@
  *
  *  Frequency row under the spectrum: the edges of the displayed span and
  *  round reference frequencies in between, lined up with the waterfall.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "freq_scale.h"
@@ -29,7 +31,7 @@ static lv_obj_t *make_label(lv_obj_t *parent, lv_coord_t x, lv_coord_t y) {
     return l;
 }
 
-static void set_freq(lv_obj_t *l, int32_t f, uint32_t color) {
+static void set_freq(lv_obj_t *l, int64_t f, uint32_t color) {
     uint16_t mhz, khz, hz;
 
     split_freq(f, &mhz, &khz, &hz);
@@ -87,9 +89,9 @@ void freq_scale_lines_set_y(lv_coord_t y) {
     }
 }
 
-void freq_scale_update(int32_t center, int32_t half_width, uint32_t color) {
+void freq_scale_update(int64_t center, int32_t half_width, uint32_t color) {
     static const int32_t mult[] = {1, 2, 5};
-    int32_t              left   = center - half_width;
+    int64_t              left   = center - half_width;
     int32_t              span   = 2 * half_width;
     int32_t              step   = 0;
     int                  n      = 0;
@@ -107,7 +109,7 @@ void freq_scale_update(int32_t center, int32_t half_width, uint32_t color) {
     }
 
     /* Deck: the edges only, in the spectrum's top corners */
-    for (int32_t f = (left / step + 1) * step; f < left + span && n < MAX_REFS && !theme_shape.deck; f += step) {
+    for (int64_t f = (left / step + 1) * step; f < left + span && n < MAX_REFS && !theme_shape.deck; f += step) {
         lv_coord_t x = (int64_t)(f - left) * WIDTH / span;
 
         if (x < EDGE_GAP || x > WIDTH - EDGE_GAP) {

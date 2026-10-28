@@ -1,5 +1,7 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "band_plan.h"
@@ -90,7 +92,8 @@ static int by_start(const void *a, const void *b) {
 }
 
 void band_plan_reload(void) {
-    static int32_t ids[BANDS], start[BANDS], stop[BANDS];
+    static int32_t ids[BANDS];
+    static int64_t start[BANDS], stop[BANDS];
     static char    names[BANDS][16];
     static bp_seg_t list[MAX_SEG];
     int            nb = cfg_bands_active_ids(ids, start, stop, names, BANDS);
@@ -105,7 +108,12 @@ void band_plan_reload(void) {
                 || strcasecmp(names[i], "FM broadcast") == 0 || strcasecmp(names[i], "Airband") == 0)) {
             continue;
         }
-        int32_t   a = start[i], e = stop[i];
+        /* The strip's segments are 32-bit. A microwave edge does not belong on
+         * the HF plan, and a truncated one would land in the wrong place. */
+        if (start[i] > 2000000000LL || stop[i] > 2000000000LL) {
+            continue;
+        }
+        int32_t   a = (int32_t)start[i], e = (int32_t)stop[i];
         bp_type_t t = type_from_name(names[i]);
         int       base = n;
 

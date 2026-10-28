@@ -14,6 +14,8 @@
  * Audio comes from audio_cb() in the audio thread; it only copies and sets
  * flags under rx_lock.  LVGL is touched only from the 30-ms UI timer and
  * the button callbacks.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 #include "app_sstv.h"
 #include "board.h"
@@ -359,7 +361,7 @@ static void show_decoding(const char *name)
 static void header(void)
 {
     char l[64];
-    snprintf(l, sizeof(l), "SSTV   %.3f MHz", cparam_i_get(cfg_fg_freq) / 1e6);
+    snprintf(l, sizeof(l), "SSTV   %.3f MHz", cparam_hz_get(cfg_fg_freq) / 1e6);
     if (strcmp(l, lv_label_get_text(sstv_frame.head_left))) lv_label_set_text(sstv_frame.head_left, l);
 }
 

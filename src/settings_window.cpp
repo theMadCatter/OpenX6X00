@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "image_level.h"
@@ -849,31 +850,137 @@ static uint8_t make_key_rows(uint8_t row, int first, int last) {
     return row;
 }
 
-/* Transverters: the band they cover (from, to) and the shift, in MHz; a shift of 0 is off (the X6200's default) */
-static void xvrt_cb(lv_event_t *e) {
-    ((ParamInt *)lv_event_get_user_data(e))->set(lv_spinbox_get_value(lv_event_get_target(e)) * 1000000L);
+/* Twelve transverters. One slot is on the screen at a time: the dial stays on
+ * the true RF, the radio is sent the IF. Frequencies are whole MHz (the LO
+ * error is kHz). Drive 0 means the radio's own power. High LO inverts the
+ * sideband at the radio only. A slot that cannot map any of its range into
+ * the HF IF is refused and the controls go back to what was saved. */
+static lv_obj_t *xvtr_slot_sb, *xvtr_name_btn, *xvtr_on, *xvtr_rx, *xvtr_hi;
+/* The spinbox is xvtr_lo_sb. xvtr_lo is the LO function in xvtr.h. */
+static lv_obj_t *xvtr_from, *xvtr_to, *xvtr_lo_sb, *xvtr_cal, *xvtr_pwr;
+static int       xvtr_ui;
+static bool      xvtr_guard;
+
+static void xvtr_switch_set(lv_obj_t *sw, int on) {
+    if (on) lv_obj_add_state(sw, LV_STATE_CHECKED);
+    else    lv_obj_clear_state(sw, LV_STATE_CHECKED);
+}
+
+static void xvtr_show(void) {
+    xvtr_slot_t s;
+
+    if (cfg_xvtr_get(xvtr_ui, &s) != 0) return;
+    xvtr_guard = true;
+    lv_spinbox_set_value(xvtr_slot_sb, xvtr_ui + 1);
+    lv_label_set_text(lv_obj_get_child(xvtr_name_btn, 0), s.name[0] ? s.name : "-");
+    xvtr_switch_set(xvtr_on, s.enabled);
+    xvtr_switch_set(xvtr_rx, s.rx_only);
+    xvtr_switch_set(xvtr_hi, s.high_side);
+    lv_spinbox_set_value(xvtr_from, (int32_t)(s.rf_from / 1000000));
+    lv_spinbox_set_value(xvtr_to, (int32_t)(s.rf_to / 1000000));
+    lv_spinbox_set_value(xvtr_lo_sb, (int32_t)(s.lo_hz / 1000000));
+    lv_spinbox_set_value(xvtr_cal, (int32_t)(s.cal_hz / 1000));
+    lv_spinbox_set_value(xvtr_pwr, s.pwr_max_dw);
+    xvtr_guard = false;
+}
+
+static void xvtr_commit(lv_event_t *e) {
+    xvtr_slot_t s;
+
+    (void)e;
+    if (xvtr_guard) return;
+    if (cfg_xvtr_get(xvtr_ui, &s) != 0) return;
+    s.enabled   = lv_obj_has_state(xvtr_on, LV_STATE_CHECKED);
+    s.rx_only   = lv_obj_has_state(xvtr_rx, LV_STATE_CHECKED);
+    s.high_side = lv_obj_has_state(xvtr_hi, LV_STATE_CHECKED);
+    s.rf_from   = (int64_t)lv_spinbox_get_value(xvtr_from) * 1000000LL;
+    s.rf_to     = (int64_t)lv_spinbox_get_value(xvtr_to) * 1000000LL;
+    s.lo_hz     = (int64_t)lv_spinbox_get_value(xvtr_lo_sb) * 1000000LL;
+    s.cal_hz    = (int64_t)lv_spinbox_get_value(xvtr_cal) * 1000LL;
+    s.pwr_max_dw = (int)lv_spinbox_get_value(xvtr_pwr);
+    if (cfg_xvtr_set(xvtr_ui, &s) != 0) {
+        msg_update_text_fmt("That LO does not reach the radio");
+        xvtr_show();
+    }
+}
+
+static void xvtr_slot_cb(lv_event_t *e) {
+    int v;
+
+    (void)e;
+    if (xvtr_guard) return;
+    v = lv_spinbox_get_value(xvtr_slot_sb);
+    if (v < 1) v = 1;
+    if (v > XVTR_COUNT) v = XVTR_COUNT;
+    xvtr_ui = v - 1;
+    xvtr_show();
+}
+
+static bool xvtr_name_ok(void) {
+    xvtr_slot_t s;
+    const char *t = textarea_window_get();
+
+    if (cfg_xvtr_get(xvtr_ui, &s) != 0) return false;
+    snprintf(s.name, sizeof(s.name), "%s", t ? t : "");
+    if (cfg_xvtr_set(xvtr_ui, &s) != 0) {
+        msg_update_text_fmt("That LO does not reach the radio");
+        return false;
+    }
+    xvtr_show();
+    return true;
+}
+
+static void xvtr_name_cb(lv_event_t *e) {
+    xvtr_slot_t s;
+
+    (void)e;
+    cfg_xvtr_get(xvtr_ui, &s);
+    textarea_window_open_w_label(xvtr_name_ok, NULL, "Name: ");
+    textarea_window_set(s.name);
 }
 
 static uint8_t make_transverters(uint8_t row) {
-    ParamInt *p[2][3] = {
-        {&cfg_sm.p_transverter_0_from, &cfg_sm.p_transverter_0_to, &cfg_sm.p_transverter_0_shift},
-        {&cfg_sm.p_transverter_1_from, &cfg_sm.p_transverter_1_to, &cfg_sm.p_transverter_1_shift},
-    };
-    const int lo[3] = {70, 70, 0};
+    xvtr_slot_t s;
+    lv_obj_t   *cell, *lab;
 
-    for (auto &x : p) {
-        char label[32];
+    cfg_xvtr_get(0, &s);
+    xvtr_ui = 0;
 
-        snprintf(label, sizeof(label), "%i: from, to, shift (0 off)", x[0]->context_id() + 1);
-        wl_row_label(row, label);
-        for (int i = 0; i < 3; i++) {
-            lv_obj_t *sb = row_spin(row, 1 + 2 * i, 2, SMALL_2, x[i]->get() / 1000000L, lo[i], 500, 3);
+    wl_row_label(row, "Slot, name");
+    xvtr_slot_sb = row_spin(row, 1, 1, SMALL_1, 1, 1, XVTR_COUNT, 2);
+    lv_obj_add_event_cb(xvtr_slot_sb, xvtr_slot_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    cell = row_cell(row, 2, 4, SMALL_N(4));
+    xvtr_name_btn = lv_btn_create(cell);
+    dialog_item(&dialog, xvtr_name_btn);
+    lv_obj_set_size(xvtr_name_btn, SMALL_N(4) - 8, ROW_H - 10);
+    lv_obj_center(xvtr_name_btn);
+    lv_obj_add_event_cb(xvtr_name_btn, xvtr_name_cb, LV_EVENT_CLICKED, NULL);
+    lab = lv_label_create(xvtr_name_btn);
+    lv_label_set_text(lab, s.name[0] ? s.name : "-");
+    lv_obj_center(lab);
+    row++;
 
-            lv_obj_add_event_cb(sb, xvrt_cb, LV_EVENT_VALUE_CHANGED, x[i]);
-        }
-        row++;
-    }
-    return row;
+    wl_row_label(row, "On, RX only, high LO");
+    xvtr_on = row_switch(row, 1, 2, SMALL_2, s.enabled, xvtr_commit, NULL);
+    xvtr_rx = row_switch(row, 3, 2, SMALL_2, s.rx_only, xvtr_commit, NULL);
+    xvtr_hi = row_switch(row, 5, 2, SMALL_2, s.high_side, xvtr_commit, NULL);
+    row++;
+
+    wl_row_label(row, "From, to, LO MHz");
+    xvtr_from = row_spin(row, 1, 2, SMALL_2, (int32_t)(s.rf_from / 1000000), 0, 30000, 5);
+    xvtr_to   = row_spin(row, 3, 2, SMALL_2, (int32_t)(s.rf_to / 1000000), 0, 30000, 5);
+    xvtr_lo_sb   = row_spin(row, 5, 2, SMALL_2, (int32_t)(s.lo_hz / 1000000), 0, 30000, 5);
+    lv_obj_add_event_cb(xvtr_from, xvtr_commit, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(xvtr_to, xvtr_commit, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(xvtr_lo_sb, xvtr_commit, LV_EVENT_VALUE_CHANGED, NULL);
+    row++;
+
+    wl_row_label(row, "Cal kHz, drive");
+    xvtr_cal = row_spin(row, 1, 2, SMALL_2, (int32_t)(s.cal_hz / 1000), -9999, 9999, 4);
+    xvtr_pwr = row_spin(row, 3, 2, SMALL_2, s.pwr_max_dw, 0, XVTR_PWR_MAX_DW, 3);
+    lv_obj_add_event_cb(xvtr_cal, xvtr_commit, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(xvtr_pwr, xvtr_commit, LV_EVENT_VALUE_CHANGED, NULL);
+    return row + 1;
 }
 
 /* The TX shift of the band the radio is on, kHz, 0 off: split comes on with it and the other VFO stays at the

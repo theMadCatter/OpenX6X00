@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 /* What the VOL and MFK knobs change, and the button actions that toggle the same settings.
@@ -17,6 +18,8 @@
 #include "util.hpp"
 
 #include "cfg/settings_manager.h"
+
+#include <cmath>
 
 extern "C" {
 #include "cluster/client.h"
@@ -355,13 +358,15 @@ void controls_cw_zap(button_data_t *data) {
 
     float   tone_freq = cw_get_tone_freq();
     int32_t key_tone  = cfg_sm.p_key_tone.get();
-    int32_t freq      = cfg_sm.cp_fg_freq.get();
+    int64_t freq      = cfg_sm.cp_fg_freq.get();
+    /* The offset is a few hundred hertz. Adding it in float would drop hertz off a 10 GHz dial. */
+    int32_t delta     = (int32_t)std::lround(tone_freq) - key_tone;
 
     LV_LOG_USER("tone_freq: %f, key_tone: %i", tone_freq, key_tone);
     if (mode == radio_mode_cw) {
-        freq += tone_freq - key_tone;
+        freq += delta;
     } else {
-        freq -= tone_freq - key_tone;
+        freq -= delta;
     }
     cfg_sm.cp_fg_freq.set((freq + 5) / 10 * 10);
 }

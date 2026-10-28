@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 /*********************
@@ -27,6 +28,7 @@
 
 #include "cfg/cfg_api.h"
 #include "cfg/db.h"
+#include "cfg/xvtr_cfg.h"
 #include "util.h"
 #include "dsp.h"
 #include "screen_rec.h"
@@ -186,8 +188,48 @@ static void power_key_cb(void *arg) {
     keypad_power_set(*(bool *)arg);
 }
 
+/* The drive actually sent. A digital app has its own cap. A transverter can
+ * cap the drive into a low-level input without changing the power the operator
+ * stored (p_pwr). 0 on the slot means no extra cap. radio_tx_freq() only reads
+ * parameters, so this does not recurse. */
 static void set_txpwr(float w) {
-    hw_set_f(HW_TXPWR_F, digi_cap && w > TX_PLAYER_MAX_PWR_W ? TX_PLAYER_MAX_PWR_W : w);
+    float cap;
+
+    if (digi_cap && w > TX_PLAYER_MAX_PWR_W) {
+        w = TX_PLAYER_MAX_PWR_W;
+    }
+    cap = cfg_xvtr_pwr_cap_w(radio_tx_freq());
+    if (cap >= 0.05f && w > cap) {
+        w = cap;
+    }
+    hw_set_f(HW_TXPWR_F, w);
+}
+
+/* High-side LO inverts the spectrum. The mode on the screen stays the
+ * operator's RF mode; only the word sent to the radio is swapped. */
+static int hw_mode_for_rf(int64_t rf, int mode) {
+    if (!cfg_xvtr_inverted(rf)) {
+        return mode;
+    }
+    switch (mode) {
+        case radio_mode_lsb:     return radio_mode_usb;
+        case radio_mode_usb:     return radio_mode_lsb;
+        case radio_mode_lsb_dig: return radio_mode_usb_dig;
+        case radio_mode_usb_dig: return radio_mode_lsb_dig;
+        case radio_mode_cw:      return radio_mode_cwr;
+        case radio_mode_cwr:     return radio_mode_cw;
+        default:                 return mode;
+    }
+}
+
+/* IF for the baseband, or -1 when it would not fit the 32-bit control word. */
+static int32_t if_for_hw(int64_t rf) {
+    int64_t iz = cfg_rf_to_if(rf);
+
+    if (iz < 0 || iz > XVTR_IF_HW_MAX_HZ) {
+        return -1;
+    }
+    return (int32_t)iz;
 }
 
 static uint32_t min_tx;
@@ -240,12 +282,7 @@ void radio_start() {
     subject_subscribe_and_notify((Subject*)cfg_band_vfoa_freq, on_vfo_freq_change, (void*)RADIO_VFO_A);
     subject_subscribe_and_notify((Subject*)cfg_band_vfob_freq, on_vfo_freq_change, (void*)RADIO_VFO_B);
 
-    subject_subscribe((Subject*)cfg_transverter_0_from, on_transverter_change, NULL);
-    subject_subscribe((Subject*)cfg_transverter_0_to, on_transverter_change, NULL);
-    subject_subscribe((Subject*)cfg_transverter_0_shift, on_transverter_change, NULL);
-    subject_subscribe((Subject*)cfg_transverter_1_from, on_transverter_change, NULL);
-    subject_subscribe((Subject*)cfg_transverter_1_to, on_transverter_change, NULL);
-    subject_subscribe((Subject*)cfg_transverter_1_shift, on_transverter_change, NULL);
+    subject_subscribe(cfg_xvtr_changed(), on_transverter_change, NULL);
 
     subject_subscribe_and_notify((Subject*)cfg_band_vfoa_mode, on_vfo_mode_change, (void*)RADIO_VFO_A);
     subject_subscribe_and_notify((Subject*)cfg_band_vfob_mode, on_vfo_mode_change, (void*)RADIO_VFO_B);
@@ -385,26 +422,32 @@ radio_state_t radio_get_state() {
     return state;
 }
 
-void radio_set_freq(int32_t freq) {
+void radio_set_freq(int64_t freq) {
+    int32_t iz;
+
     if (!radio_check_freq(freq)) {
-        LV_LOG_ERROR("Freq %i incorrect", freq);
+        LV_LOG_ERROR("Freq %lli incorrect", (long long)freq);
+        return;
+    }
+    iz = if_for_hw(freq);
+    if (iz < 0) {
+        LV_LOG_ERROR("IF for %lli out of range", (long long)freq);
         return;
     }
     radio_vfo_t vfo = param_i_get(cfg_band_current_vfo);
-    int32_t shift = cfg_transverter_shift_for(freq);
-    WITH_RADIO_LOCK(hw_vfo_set_freq(vfo, freq - shift));
+    WITH_RADIO_LOCK(hw_vfo_set_freq(vfo, iz));
 }
 
-bool radio_check_freq(int32_t freq) {
+bool radio_check_freq(int64_t freq) {
     return cfg_is_valid_hw_freq(freq);
 }
 
 /* With a TX shift the frequency the shift asks for, not the other VFO's: that VFO is held to 100 kHz and up, so a
  * shift below 0 Hz left it at 100 kHz, which can transmit and keyed there. This one is refused (tx_refused) and red
  * on the screen instead */
-int32_t radio_tx_freq(void) {
+int64_t radio_tx_freq(void) {
     int32_t shift = param_i_get(cfg_band_tx_shift);
-    int32_t fg = cparam_i_get(cfg_fg_freq);
+    int64_t fg = cparam_hz_get(cfg_fg_freq);
 
     if (!param_i_get(cfg_band_split)) {
         return fg;
@@ -412,7 +455,7 @@ int32_t radio_tx_freq(void) {
     if (shift) {
         return param_i_get(cfg_band_current_vfo) == RADIO_VFO_A ? fg + shift : fg - shift;
     }
-    return cparam_i_get(cfg_bg_freq);
+    return cparam_hz_get(cfg_bg_freq);
 }
 
 /* The base's split bit off while the active VFO carries the TX frequency (radio_set_tx_freq) */
@@ -423,7 +466,7 @@ static atomic_bool split_held;
  * 1200 Hz with a +700 Hz TX shift on 14.074 heard at 14.075325 (A + 1325, PSK Reporter, 2026-10-26); moving the
  * active VFO without split is the path both bases take. radio_set_freq moved the active one in split, so FT8 and the
  * other apps sent their tone at B + 1325 Hz, and never restored the IF shift (the X6100's VFO stayed off by it) */
-void radio_set_tx_freq(int32_t freq) {
+void radio_set_tx_freq(int64_t freq) {
     radio_vfo_t vfo = param_i_get(cfg_band_current_vfo);
 
     if (freq == 0) {
@@ -437,13 +480,20 @@ void radio_set_tx_freq(int32_t freq) {
         return;
     }
     if (!cfg_is_tx_freq(freq)) {
-        LV_LOG_ERROR("TX freq %i incorrect", freq);
+        LV_LOG_ERROR("TX freq %lli incorrect", (long long)freq);
         return;
     }
     if (param_i_get(cfg_band_split) && !atomic_exchange(&split_held, true)) {
         WITH_RADIO_LOCK(hw_set_i(HW_SPLIT, false));
     }
-    WITH_RADIO_LOCK(hw_vfo_set_freq(vfo, freq - cfg_transverter_shift_for(freq)));
+    {
+        int32_t iz = if_for_hw(freq);
+        if (iz < 0) {
+            LV_LOG_ERROR("TX IF for %lli out of range", (long long)freq);
+            return;
+        }
+        WITH_RADIO_LOCK(hw_vfo_set_freq(vfo, iz));
+    }
 }
 
 uint16_t radio_change_vol(int16_t df) {
@@ -630,7 +680,7 @@ void radio_set_charger(bool on) {
  * (the apps), CW, the tuner and the SWR scan come through here; the base's own TX permit covers its hand-mic PTT
  * and paddle */
 static bool tx_refused(void) {
-    int32_t freq = radio_tx_freq();
+    int64_t freq = radio_tx_freq();
 
     static uint64_t said;
 
@@ -803,20 +853,36 @@ static void on_pwr_change(Subject *subj, void *user_data) {
 
 static void on_vfo_freq_change(Subject *subj, void *user_data) {
     radio_vfo_t vfo = (radio_vfo_t )user_data;
-    int32_t new_val;
+    int64_t new_val;
+    int32_t mode;
+    int32_t iz;
     if (vfo == RADIO_VFO_A) {
-        new_val = param_i_get(cfg_band_vfoa_freq);
+        new_val = param_hz_get(cfg_band_vfoa_freq);
+        mode    = param_i_get(cfg_band_vfoa_mode);
     } else {
-        new_val = param_i_get(cfg_band_vfob_freq);
+        new_val = param_hz_get(cfg_band_vfob_freq);
+        mode    = param_i_get(cfg_band_vfob_mode);
     }
-    int32_t shift = cfg_transverter_shift_for(new_val);
-    shift += param_i_get(cfg_band_if_shift);
+    /* The dial is RF. The radio gets the IF, plus the band's IF shift (the
+     * receiver's own offset, not the transverter LO). A wild IF is not sent:
+     * the control word is 32 bits and a wrapped value would transmit somewhere
+     * else. Crossing into a high-side transverter also swaps the sideband. */
+    iz = if_for_hw(new_val);
+    if (iz >= 0) {
+        iz += param_i_get(cfg_band_if_shift);
+    }
     radio_lock();
-    bool changed = hw_vfo_set_freq(vfo, new_val - shift);
-    radio_unlock();
-    if (changed) {
-        LV_LOG_USER("Radio set vfo %i freq=%i (%i)", vfo, new_val, new_val - shift);
+    if (iz < 0 || iz > XVTR_IF_HW_MAX_HZ) {
+        LV_LOG_ERROR("Radio skip vfo %i freq=%lli", vfo, (long long)new_val);
+    } else {
+        bool changed = hw_vfo_set_freq(vfo, iz);
+        hw_vfo_set_mode(vfo, hw_mode_for_rf(new_val, mode));
+        if (changed) {
+            LV_LOG_USER("Radio set vfo %i freq=%lli (if %i)", vfo, (long long)new_val, iz);
+        }
     }
+    set_txpwr(param_f_get(cfg_pwr));
+    radio_unlock();
 }
 
 /* A transverter's range or shift changed (Settings > General > TRANSVERTERS): both VFOs again with the shift that
@@ -830,11 +896,13 @@ static void on_transverter_change(Subject *subj, void *user_data) {
 static void on_vfo_mode_change(Subject *subj, void *user_data) {
     radio_vfo_t vfo = (radio_vfo_t )user_data;
     int32_t new_val = subject_i_get((SubjectInt*)subj);
+    int64_t rf = vfo == RADIO_VFO_A ? param_hz_get(cfg_band_vfoa_freq) : param_hz_get(cfg_band_vfob_freq);
+    int     hw_mode = hw_mode_for_rf(rf, new_val);
     radio_lock();
-    bool changed = hw_vfo_set_mode(vfo, new_val);
+    bool changed = hw_vfo_set_mode(vfo, hw_mode);
     radio_unlock();
     if (changed) {
-        LV_LOG_USER("Radio set vfo %i mode=%i", vfo, new_val);
+        LV_LOG_USER("Radio set vfo %i mode=%i (hw %i)", vfo, new_val, hw_mode);
     }
 }
 
@@ -1003,7 +1071,7 @@ static void on_fw_zoom_change(Subject *subj, void *user_data) {
 
 static void on_if_shift_change(Subject *subj, void *user_data) {
     int32_t shift = subject_i_get((SubjectInt*)subj);
-    int32_t cur_freq = cparam_i_get(cfg_fg_freq);
+    int32_t cur_freq = cparam_hz_get(cfg_fg_freq);
 
     LV_LOG_USER("Shift: %d, cur_freq: %d\n", shift, cur_freq);
     if (shift != 0) {

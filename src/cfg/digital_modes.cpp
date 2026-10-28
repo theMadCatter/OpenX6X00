@@ -6,10 +6,12 @@
 // DigitalModesTable (db.h/db.cpp) and writes the found frequency/mode back
 // through the computed params cp_fg_freq / cp_cur_mode (their reverse paths
 // write into the active VFO band params and trigger mode/band switching).
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "digital_modes.h"
 
 #include <atomic>
+#include <cstdint>
 #include <cstdio>
 #include <string>
 
@@ -28,7 +30,9 @@ std::atomic<int32_t> last_freq{0};
 } // namespace
 
 extern "C" bool cfg_digital_load(int8_t dir, cfg_digital_type_t type) {
-    int32_t cur_freq = cfg_sm.cp_fg_freq.get();
+    int64_t rf       = cfg_sm.cp_fg_freq.get();
+    /* Presets are HF. A dial on 10 GHz asks for the top of what the table can hold. */
+    int32_t cur_freq = rf > INT32_MAX ? INT32_MAX : static_cast<int32_t>(rf);
 
     DigitalModesTable::LoadResult result;
     if (dir > 0) {

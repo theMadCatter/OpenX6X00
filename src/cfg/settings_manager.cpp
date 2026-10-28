@@ -1,5 +1,10 @@
 #include "settings_manager.h"
 
+#include "xvtr_cfg.h"
+
+static_assert(SettingsManager::HF_MIN_FREQ == XVTR_IF_MIN_HZ, "transverter IF window must match HF");
+static_assert(SettingsManager::HF_MAX_FREQ == XVTR_IF_MAX_HZ, "transverter IF window must match HF");
+
 #include <algorithm>
 #include <chrono>
 #include <cstdio>
@@ -34,8 +39,8 @@ SettingsManager::SettingsManager()
       // Sources (VFO frequency params + current_vfo) are bound once in
       // init_load() via ComputedParameter::bind().
       // The background VFO frequency is the complement of the active one.
-      cp_fg_freq([this]() { return fg_freq_get(); }, [this](int32_t freq) { fg_freq_set(freq); }),
-      cp_bg_freq([this]() { return bg_freq_get(); }, [this](int32_t freq) { bg_freq_set(freq); }),
+      cp_fg_freq([this]() { return fg_freq_get(); }, [this](int64_t freq) { fg_freq_set(freq); }),
+      cp_bg_freq([this]() { return bg_freq_get(); }, [this](int64_t freq) { bg_freq_set(freq); }),
 
       // Computed current mode: the mode of the active VFO of the current band.
       // Analogous to cp_fg_freq. Sources (VFO mode params + current_vfo) are
@@ -85,15 +90,10 @@ void SettingsManager::init_load(void (*on_db_error)(const char *msg)) {
         }
     }
 
-    // Transverter params are loaded individually (fixed context_id = the
-    // transverter number). NOT_FOUND keeps the default value. Before the band:
-    // the clamps of load_band_vfo ask band_use, which reads them.
-    p_transverter_0_from.load(0);
-    p_transverter_0_to.load(0);
-    p_transverter_0_shift.load(0);
-    p_transverter_1_from.load(1);
-    p_transverter_1_to.load(1);
-    p_transverter_1_shift.load(1);
+    // Transverter slots before the band: load_band_vfo asks band_use, which
+    // reads them. The X6200's 2 m and 70 cm start off (HAS_VHF_RX); a shift
+    // saved by the old two-slot page is kept (xvtr_cfg.cpp).
+    cfg_xvtr_load(HAS_VHF_RX ? 1 : 0);
 
     // The starting band comes from the persisted global parameter.
     band_id_ = p_band_id.get();
@@ -443,12 +443,12 @@ void SettingsManager::stop_flush_thread() {
     }
 }
 
-int32_t SettingsManager::fg_freq_get() {
+int64_t SettingsManager::fg_freq_get() {
     // Front-panel frequency = frequency of the active VFO of the current band.
     return p_band_current_vfo.get() == 0 ? p_band_vfoa_freq.get() : p_band_vfob_freq.get();
 }
 
-void SettingsManager::fg_freq_set(int32_t freq) {
+void SettingsManager::fg_freq_set(int64_t freq) {
     // Clamp to the nearest hardware-usable frequency before writing back, so
     // invalid frequencies never reach the VFO params.
     freq = clamp_to_valid_hw_freq(freq);
@@ -510,11 +510,11 @@ void SettingsManager::cur_agc_set(int32_t agc) {
     }
 }
 
-int32_t SettingsManager::bg_freq_get() {
+int64_t SettingsManager::bg_freq_get() {
     return p_band_current_vfo.get() == RADIO_VFO_A ? p_band_vfob_freq.get() : p_band_vfoa_freq.get();
 }
 
-void SettingsManager::bg_freq_set(int32_t freq) {
+void SettingsManager::bg_freq_set(int64_t freq) {
     if (p_band_current_vfo.get() == RADIO_VFO_A) {
         p_band_vfob_freq.set(freq);
     } else {
@@ -522,33 +522,37 @@ void SettingsManager::bg_freq_set(int32_t freq) {
     }
 }
 
-int32_t SettingsManager::clamp_to_valid_hw_freq(int32_t freq) const {
+int64_t SettingsManager::clamp_to_valid_hw_freq(int64_t freq) const {
     if (is_valid_hw_freq(freq)) {
         return freq;
     }
 
-    // Boundaries of every hardware-usable frequency range (HF_MAX_FREQ again for one that is not there)
-    const bool    wr12 = HAS_VHF_RX && p_wr12.get();
-    const int32_t bounds[] = {
-        HF_MIN_FREQ,                // HF lower limit
-        HF_MAX_FREQ,                // HF upper limit
-        HAS_VHF_RX ? VHF_RX_MIN_FREQ : HF_MAX_FREQ,     // the X6200's FM broadcast and airband
-        HAS_VHF_RX ? VHF_RX_MAX_FREQ : HF_MAX_FREQ,
-        wr12 ? WR12_MIN_FREQ : HF_MAX_FREQ,             // the WR12
-        wr12 ? WR12_MAX_FREQ : HF_MAX_FREQ,
-        p_transverter_0_shift.get() ? p_transverter_0_from.get() : HF_MAX_FREQ,    // transverter 0 [from, to], on
-        p_transverter_0_shift.get() ? p_transverter_0_to.get() : HF_MAX_FREQ,
-        p_transverter_1_shift.get() ? p_transverter_1_from.get() : HF_MAX_FREQ,    // transverter 1 [from, to], on
-        p_transverter_1_shift.get() ? p_transverter_1_to.get() : HF_MAX_FREQ,
-    };
+    // Boundaries of every hardware-usable range. A transverter contributes the
+    // slice the IF can actually reach, not the whole ADIF band. HF_MAX_FREQ
+    // stands in for a range this radio does not have, so it cannot win.
+    const bool wr12 = HAS_VHF_RX && p_wr12.get();
+    int64_t    bounds[16 + XVTR_COUNT * 2];
+    int        n = 0;
+    bounds[n++] = HF_MIN_FREQ;
+    bounds[n++] = HF_MAX_FREQ;
+    bounds[n++] = HAS_VHF_RX ? VHF_RX_MIN_FREQ : HF_MAX_FREQ;
+    bounds[n++] = HAS_VHF_RX ? VHF_RX_MAX_FREQ : HF_MAX_FREQ;
+    bounds[n++] = wr12 ? WR12_MIN_FREQ : HF_MAX_FREQ;
+    bounds[n++] = wr12 ? WR12_MAX_FREQ : HF_MAX_FREQ;
+    int64_t xv_lo[XVTR_COUNT], xv_hi[XVTR_COUNT];
+    int     edges = cfg_xvtr_edges(xv_lo, xv_hi, XVTR_COUNT);
+    for (int i = 0; i < edges; i++) {
+        bounds[n++] = xv_lo[i];
+        bounds[n++] = xv_hi[i];
+    }
 
-    int32_t nearest = bounds[0];
-    int64_t best = freq > bounds[0] ? static_cast<int64_t>(freq) - bounds[0] : static_cast<int64_t>(bounds[0]) - freq;
-    for (const int32_t b : bounds) {
-        const int64_t d = freq > b ? static_cast<int64_t>(freq) - b : static_cast<int64_t>(b) - freq;
+    int64_t nearest = bounds[0];
+    int64_t best    = freq > bounds[0] ? freq - bounds[0] : bounds[0] - freq;
+    for (int i = 1; i < n; i++) {
+        const int64_t d = freq > bounds[i] ? freq - bounds[i] : bounds[i] - freq;
         if (d < best) {
             best    = d;
-            nearest = b;
+            nearest = bounds[i];
         }
     }
     return nearest;
@@ -734,18 +738,18 @@ void SettingsManager::vfo_freq_change_cb(Subject *subj, void *user_data) {
     if (subj != active) {
         return;
     }
-    int32_t freq = static_cast<SubjectT<int32_t> *>(subj)->get();
+    int64_t freq = static_cast<SubjectT<int64_t> *>(subj)->get();
 
     // REV with a TX shift: the band of VFO A, which tx_shift_follow is about to put at B - the shift. B itself can
     // lie beyond the band (10 m + 500 kHz from 29.500), and following it went into the gap above and lost the shift
     if (subj == &mgr->p_band_vfob_freq && mgr->p_band_tx_shift.get() && mgr->p_band_split.get()) {
-        freq = std::max(freq - mgr->p_band_tx_shift.get(), HF_MIN_FREQ);
+        freq = std::max<int64_t>(freq - mgr->p_band_tx_shift.get(), HF_MIN_FREQ);
     }
     mgr->band_follow(freq);
 }
 
-void SettingsManager::band_follow(int32_t freq) {
-    BandInfoLoadResult result = BandsTable::get_by_freq(static_cast<uint32_t>(freq));
+void SettingsManager::band_follow(int64_t freq) {
+    BandInfoLoadResult result = BandsTable::get_by_freq(freq);
     if (result.rc == SUCCESS && result.value.id != band_id_) {
         switch_band(result.value.id, true);
     }
@@ -911,12 +915,10 @@ void SettingsManager::load_band_vfo(int band_id, bool implicit) {
         // frequency and neither radio tunes 70 MHz); an out-of-range loaded value is clamped.
         int rc = p_band_vfoa_freq.load(band_id);
         if (rc == NOT_FOUND) {
-            p_band_vfoa_freq.set_quiet(have_band ? clamp_to_valid_hw_freq(static_cast<int32_t>(band.value.start_freq))
-                                                 : default_freq);
+            p_band_vfoa_freq.set_quiet(have_band ? clamp_to_valid_hw_freq(band.value.start_freq) : default_freq);
         } else if (rc == SUCCESS && have_band) {
-            const int32_t freq = p_band_vfoa_freq.get();
-            if (freq < static_cast<int32_t>(band.value.start_freq) ||
-                freq > static_cast<int32_t>(band.value.stop_freq)) {
+            const int64_t freq = p_band_vfoa_freq.get();
+            if (freq < band.value.start_freq || freq > band.value.stop_freq) {
                 p_band_vfoa_freq.set_quiet(clamp_to_valid_hw_freq(freq));
             }
         }
@@ -947,9 +949,8 @@ void SettingsManager::load_band_vfo(int band_id, bool implicit) {
         if (rc == NOT_FOUND) {
             p_band_vfob_freq.set_quiet(p_band_vfoa_freq.get());
         } else if (rc == SUCCESS && have_band) {
-            const int32_t freq = p_band_vfob_freq.get();
-            if (freq < static_cast<int32_t>(band.value.start_freq) ||
-                freq > static_cast<int32_t>(band.value.stop_freq)) {
+            const int64_t freq = p_band_vfob_freq.get();
+            if (freq < band.value.start_freq || freq > band.value.stop_freq) {
                 p_band_vfob_freq.set_quiet(clamp_to_valid_hw_freq(freq));
             }
         }
@@ -981,7 +982,7 @@ void SettingsManager::load_band_vfo(int band_id, bool implicit) {
 }
 
 /* 60 m is worked in USB, though under 10 MHz (the WRC-15 band and the channels around it) */
-int32_t SettingsManager::default_mode(int32_t freq) const {
+int32_t SettingsManager::default_mode(int64_t freq) const {
     if (band_use(freq, freq) == BAND_USE_RX) {
         if (freq >= VHF_RX_MIN_FREQ && freq < 108000000) return radio_mode_wfm;
         if (freq >= 108000000 && freq <= VHF_RX_MAX_FREQ) return radio_mode_am;
@@ -994,7 +995,7 @@ int32_t SettingsManager::default_mode(int32_t freq) const {
 /* A band (or a gap) with no mode saved yet. Broadcast bands (ids 100-199) were LSB under 10 MHz and USB above,
  * where every station is AM: it sounded garbled and hard to find (issue #9). FM broadcast and Airband (112, 113)
  * are receive bands of their own */
-int32_t SettingsManager::resolve_default_mode(int32_t freq, int32_t band_id) const {
+int32_t SettingsManager::resolve_default_mode(int64_t freq, int32_t band_id) const {
     if (band_id >= 100 && band_id < 200 && band_use(freq, freq) != BAND_USE_RX) return radio_mode_am;
     return default_mode(freq);
 }

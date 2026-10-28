@@ -7,6 +7,8 @@
  *  below it. The protocol work is in src/js8, which knows nothing of LVGL;
  *  it calls back from its own threads, and every such call is handed to
  *  the UI thread through scheduler_put() before it touches a widget.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE     /* pthread_setname_np */
@@ -784,7 +786,7 @@ static void heard_from(js8_rx_msg_t *msg, bool first_time, int64_t now)
     if (param_i_get(cfg_pskreporter) && !msg->low_confidence && msg->from[0]) {
         bool known = find_station(msg->from, &known_st); /* their grid, if they sent one */
         pskr_spot(params.callsign.x, station_qth(), VERSION, msg->from, known ? known_st.grid : "",
-                  (uint32_t)cparam_i_get(cfg_fg_freq) + (uint32_t)(msg->freq_hz + 0.5f), msg->snr, "JS8");
+                  cparam_hz_get(cfg_fg_freq) + (int64_t)(msg->freq_hz + 0.5f), msg->snr, "JS8");
     }
     if (msg->from[0] && !msg->low_confidence) {
         js8_sync_sample_t *s = &sync_samples[sync_head++ % SYNC_SAMPLES];
@@ -968,7 +970,7 @@ static void rebuild_station_rows(void)
     if (!selected_station(keep, sizeof(keep), &unused_hz, &unused_db)) keep[0] = '\0';
 
     st_count = js8_stations_list(stations, now_wall_ms(), st_rows, MAX_ROWS);
-    int band = qso_log_freq_to_band(cparam_i_get(cfg_fg_freq));
+    int band = qso_log_freq_to_band(cparam_hz_get(cfg_fg_freq));
     int at   = 0;
 
     table_empty();
@@ -2159,7 +2161,7 @@ static void load_base(void)
     load_band(0); /* also sets the mode */
     int32_t hz = params.js8_custom_hz.x;
     bool    in_range = hz >= CUSTOM_MIN_HZ && hz <= CUSTOM_MAX_HZ;
-    if (params.js8_custom_on.x && in_range) cparam_i_set(cfg_fg_freq, hz);
+    if (params.js8_custom_on.x && in_range) cparam_hz_set(cfg_fg_freq, hz);
     else if (params.js8_custom_on.x) params_bool_set(&params.js8_custom_on, false); /* out of range: back to the preset */
     js8_usb_dig(); /* a custom frequency on another band loaded that band's mode */
 }
@@ -2167,7 +2169,7 @@ static void load_base(void)
 /* The Stations list kept for the dial frequency in use, made on first use. */
 static js8_stations_t *stations_for_band(void)
 {
-    int32_t khz       = cparam_i_get(cfg_fg_freq) / 1000;
+    int32_t khz       = cparam_hz_get(cfg_fg_freq) / 1000;
     int     free_slot = -1;
     for (int s = 0; s < BAND_LISTS; s++) {
         if (band_lists[s].list == NULL) {
@@ -4205,7 +4207,7 @@ static bool p3_spot_typed(void) {
 }
 
 static int32_t p3_spot_hz(void) {
-    return p3_spot_typed() ? spot_typed_hz : cparam_i_get(cfg_fg_freq);
+    return p3_spot_typed() ? spot_typed_hz : cparam_hz_get(cfg_fg_freq);
 }
 
 /* MHz, 3 decimals or as many more as it takes: "7.078", "7.1855". */
@@ -4430,7 +4432,7 @@ static void p3_log_fill(const char *call) {
     p3_log_reports(in_qso ? &qso : NULL, in_list ? &heard : NULL);
     log_entry.on_ms   = in_qso ? qso.start_ms : t_now;
     log_entry.off_ms  = t_now;
-    log_entry.freq_hz = (uint64_t)cparam_i_get(cfg_fg_freq) + params.js8_tx_freq.x; /* dial + audio offset */
+    log_entry.freq_hz = (uint64_t)cparam_hz_get(cfg_fg_freq) + params.js8_tx_freq.x; /* dial + audio offset */
     snprintf(log_entry.my_call, sizeof log_entry.my_call, "%s", params.callsign.x);
     snprintf(log_entry.my_grid, sizeof(log_entry.my_grid), "%s", station_qth());
     pwr_w              = param_f_get(cfg_pwr);
@@ -5287,7 +5289,7 @@ static void alert_check(js8_rx_msg_t *msg, bool first_heard) {
     } else if ((on & JS8_ALERT_CQ) && msg->cq) {
         beep = true;
     } else if ((on & JS8_ALERT_NEW) && first_heard && msg->from[0]) {
-        int band = qso_log_freq_to_band(cparam_i_get(cfg_fg_freq));
+        int band = qso_log_freq_to_band(cparam_hz_get(cfg_fg_freq));
         if (qso_log_search_worked(msg->from, MODE_JS8, band) <= 0) {
             msg_update_text_fmt("New station: %s", msg->from);
             beep = true;
@@ -5513,7 +5515,7 @@ static void tune_custom(const char *typed) {
     if (!parse_custom(typed, &dial)) return;
     params_int32_set(&params.js8_custom_hz, dial);
     params_bool_set(&params.js8_custom_on, true); /* the Freq label shows it */
-    cparam_i_set(cfg_fg_freq, dial);
+    cparam_hz_set(cfg_fg_freq, dial);
     js8_usb_dig(); /* the mode JS8 needs */
     retuned();     /* station list, waterfall, labels */
     p3_say(where_label());

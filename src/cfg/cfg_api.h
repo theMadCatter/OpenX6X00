@@ -21,6 +21,7 @@
 //
 // cfg_api_init() does NOT open the DB or call cfg_db_init(): the caller owns
 // the sqlite3 connection and table initialisation (avoids double-Init).
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "computed_api.h"
 #include "subject_api.h"
@@ -182,8 +183,8 @@ extern ParamFloat *cfg_cessb_power_up;       // p_cessb_power_up
 // --- BAND params ---
 extern ParamInt   *cfg_band_current_vfo;  // p_band_current_vfo
 extern ParamInt   *cfg_band_if_shift;     // p_band_if_shift
-extern ParamInt   *cfg_band_vfoa_freq;    // p_band_vfoa_freq
-extern ParamInt   *cfg_band_vfob_freq;    // p_band_vfob_freq
+extern ParamHz    *cfg_band_vfoa_freq;    // p_band_vfoa_freq, Hz, 64-bit RF
+extern ParamHz    *cfg_band_vfob_freq;    // p_band_vfob_freq, Hz, 64-bit RF
 extern ParamFloat *cfg_band_dac_offset;   // p_band_dac_offset
 extern ParamInt   *cfg_band_grid_min;     // p_band_grid_min
 extern ParamInt   *cfg_band_grid_max;     // p_band_grid_max
@@ -205,22 +206,15 @@ extern ParamInt *cfg_mode_squelch;   // p_mode_squelch
 extern ParamInt *cfg_mode_zoom;      // p_mode_zoom ("spectrum_factor")
 extern ParamInt *cfg_mode_freq_step; // p_mode_freq_step
 
-// --- Transverter params (OTHER storage, fixed HW conversion) ---
-// Values are Hz (p_transverter_{0,1}_{from,to,shift}).
-extern ParamInt *cfg_transverter_0_from;
-extern ParamInt *cfg_transverter_0_to;
-extern ParamInt *cfg_transverter_0_shift;
-extern ParamInt *cfg_transverter_1_from;
-extern ParamInt *cfg_transverter_1_to;
-extern ParamInt *cfg_transverter_1_shift;
+// Transverters: src/cfg/xvtr_cfg.h (twelve slots, not six int32 parameters).
 
 // --- Computed params (current operating state, not persisted) ---
-extern ComputedParamInt *cfg_fg_freq;          // cp_fg_freq
+extern ComputedParamHz  *cfg_fg_freq;          // cp_fg_freq, Hz, 64-bit RF
 extern ComputedParamInt *cfg_cur_mode;         // cp_cur_mode
 extern ComputedParamInt *cfg_cur_agc;          // cp_cur_agc
 extern ComputedParamInt *cfg_cur_att;          // cp_cur_att
 extern ComputedParamInt *cfg_cur_pre;          // cp_cur_pre
-extern ComputedParamInt *cfg_bg_freq;          // cp_bg_freq
+extern ComputedParamHz  *cfg_bg_freq;          // cp_bg_freq, Hz, 64-bit RF
 extern ComputedParamInt *cfg_cur_filter_low;   // cp_cur_filter_low
 extern ComputedParamInt *cfg_cur_filter_high;  // cp_cur_filter_high
 extern ComputedParamInt *cfg_cur_filter_bw;    // cp_cur_filter_bw

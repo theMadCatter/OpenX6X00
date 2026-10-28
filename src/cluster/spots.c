@@ -2,6 +2,8 @@
  *  SPDX-License-Identifier: LGPL-2.1-or-later
  *
  *  DX cluster spots: line parser, spot store, band and mode helpers.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE /* strcasestr */
@@ -16,17 +18,25 @@
 
 static const struct {
     const char *name;
-    int32_t     low, high;
+    int64_t     low, high;
 } bands[] = {
     {"160m", 1800000, 2000000},     {"80m", 3500000, 3800000},     {"60m", 5351500, 5366500},
     {"40m", 7000000, 7200000},      {"30m", 10100000, 10150000},   {"20m", 14000000, 14350000},
     {"17m", 18068000, 18168000},    {"15m", 21000000, 21450000},   {"12m", 24890000, 24990000},
     {"10m", 28000000, 29700000},    {"8m", 40000000, 42000000},    {"6m", 50000000, 52000000},
+    /* Appended. Existing indexes stay put: a saved filter bit still means the same HF band.
+     * 6 cm is not 6 m. Indexes at or above 16 do not fit the uint16 filter mask; the
+     * "spots on this band" view matches by cluster_band_of() instead. */
+    {"4m", 70000000, 72000000},     {"2m", 144000000, 148000000},  {"1.25m", 222000000, 225000000},
+    {"70cm", 420000000, 450000000}, {"33cm", 902000000, 928000000}, {"23cm", 1240000000LL, 1300000000LL},
+    {"13cm", 2300000000LL, 2450000000LL}, {"9cm", 3300000000LL, 3500000000LL},
+    {"6cm", 5650000000LL, 5925000000LL}, {"3cm", 10000000000LL, 10500000000LL},
+    {"1.25cm", 24000000000LL, 24250000000LL},
 };
 
 #define BANDS_COUNT ((int)(sizeof(bands) / sizeof(bands[0])))
 
-int cluster_band_of(int32_t hz) {
+int cluster_band_of(int64_t hz) {
     for (int i = 0; i < BANDS_COUNT; i++)
         if (hz >= bands[i].low && hz <= bands[i].high) return i;
     return -1;
@@ -73,7 +83,7 @@ static bool parse_freq_call(const char **pp, cluster_spot_t *out) {
     const char *p = skip_space(*pp);
     char       *end;
     double      khz = strtod(p, &end);
-    if (end == p || khz < 100.0 || khz > 1.0e7) return false;
+    if (end == p || khz < 100.0 || khz > 3.0e7) return false; /* 30 GHz */
     p = skip_space(end);
     const char *e = word_end(p);
     bool digit = false, alpha = false;
@@ -83,7 +93,7 @@ static bool parse_freq_call(const char **pp, cluster_spot_t *out) {
     }
     if (!digit || !alpha) return false; /* not a callsign */
     copy_word(out->dx, sizeof(out->dx), p, (size_t)(e - p));
-    out->freq_hz = (int32_t)(khz * 1000.0 + 0.5);
+    out->freq_hz = (int64_t)(khz * 1000.0 + 0.5);
     *pp = e;
     return true;
 }
@@ -174,7 +184,7 @@ static bool newer(uint16_t a, uint16_t b) {
 
 void cluster_store_add(cluster_store_t *s, const cluster_spot_t *spot) {
     for (int i = 0; i < s->count; i++) {
-        if (strcasecmp(s->spots[i].dx, spot->dx) == 0 && abs(s->spots[i].freq_hz - spot->freq_hz) <= 1000) {
+        if (strcasecmp(s->spots[i].dx, spot->dx) == 0 && llabs(s->spots[i].freq_hz - spot->freq_hz) <= 1000) {
             if (newer(s->spots[i].utc_min, spot->utc_min)) return;
             memmove(&s->spots[i], &s->spots[i + 1], (size_t)(s->count - i - 1) * sizeof(s->spots[0]));
             s->count--;

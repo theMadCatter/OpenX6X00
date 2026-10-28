@@ -15,6 +15,7 @@
 // access (single event loop). Individual SubjectT/Parameter values still
 // protect themselves with their own mutexes, and PendingWrites has its own
 // mutex, so concurrent readers of parameter values remain safe.
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include <condition_variable>
 #include <cstdint>
@@ -32,6 +33,7 @@
 #include "parameter.h"
 #include "pending_writes.h"
 #include "settings_manager_api.h"
+#include "xvtr_cfg.h"
 
 extern "C" {
 }
@@ -461,10 +463,12 @@ class SettingsManager {
         &band_params_};
     // BAND VFO params (context_id = bands_id). These are NOT in the band
     // registry: load_band_vfo() loads them in explicit dependency order so the
-    // DB restore/clamp rules can reference already-loaded siblings. Up to 1 GHz: the WR12's top
-    Parameter<int32_t> p_band_vfoa_freq{"vfoa_freq", 14'100'000, 100'000, 1'000'000'000,
+    // DB restore/clamp rules can reference already-loaded siblings. int64 Hz:
+    // the dial stores the true RF, which is past 2^31 at 10 GHz and 24 GHz.
+    // The hardware still receives the IF (cfg_rf_to_if), which fits in int32.
+    Parameter<int64_t> p_band_vfoa_freq{"vfoa_freq", 14'100'000, 100'000, XVTR_RF_MAX_HZ,
         StorageType::BAND, pending_writes_};
-    Parameter<int32_t> p_band_vfob_freq{"vfob_freq", 14'150'000, 100'000, 1'000'000'000,
+    Parameter<int64_t> p_band_vfob_freq{"vfob_freq", 14'150'000, 100'000, XVTR_RF_MAX_HZ,
         StorageType::BAND, pending_writes_};
     Parameter<int32_t> p_band_vfoa_mode{"vfoa_mode", radio_mode_usb, (int32_t)radio_mode_lsb, (int32_t)radio_mode_last,
         StorageType::BAND, pending_writes_};
@@ -483,27 +487,9 @@ class SettingsManager {
     Parameter<int32_t> p_band_vfob_agc{"vfob_agc", radio_agc_auto, 0, (int32_t)radio_agc_auto,
         StorageType::BAND, pending_writes_};
 
-    // --- Transverter params (OTHER storage, fixed HW conversion) ---
-    // context_id is the fixed transverter number (0 or 1) — never switched. NOT registered
-    // in any load-all registry (group = nullptr): they are loaded individually
-    // in init_load() with explicit load(0)/load(1). Values are frequencies in Hz.
-    // A shift of 0 is a transverter that is off. The X6200's are off by default: its 2 m and 70 cm are the WR12's,
-    // to receive, and the always-on transverters tuned "145.500" to 29.500 MHz and transmitted there, on 10 m.
-    // Migration _11 keeps the shift of one set up before. The X6100 keeps upstream's two, on by default
-    // Transverter 0 (2m: 144-150 MHz, IF at 28 MHz)
-    Parameter<int32_t> p_transverter_0_from{"from", 144'000'000, 70'000'000, 500'000'000,
-        StorageType::TRANSVERTER, pending_writes_, nullptr, 0};
-    Parameter<int32_t> p_transverter_0_to{"to", 150'000'000, 70'000'000, 500'000'000,
-        StorageType::TRANSVERTER, pending_writes_, nullptr, 0};
-    Parameter<int32_t> p_transverter_0_shift{"shift", HAS_VHF_RX ? 0 : 116'000'000, 0, 500'000'000,
-        StorageType::TRANSVERTER, pending_writes_, nullptr, 0};
-    // Transverter 1 (70cm: 432-438 MHz, IF at 28 MHz)
-    Parameter<int32_t> p_transverter_1_from{"from", 432'000'000, 70'000'000, 500'000'000,
-        StorageType::TRANSVERTER, pending_writes_, nullptr, 1};
-    Parameter<int32_t> p_transverter_1_to{"to", 438'000'000, 70'000'000, 500'000'000,
-        StorageType::TRANSVERTER, pending_writes_, nullptr, 1};
-    Parameter<int32_t> p_transverter_1_shift{"shift", HAS_VHF_RX ? 0 : 404'000'000, 0, 500'000'000,
-        StorageType::TRANSVERTER, pending_writes_, nullptr, 1};
+    // Transverters are not Parameter members. Twelve slots live in the same
+    // `transverter` table and are loaded by cfg_xvtr_load() before the bands,
+    // because load_band_vfo() asks band_use(). See xvtr_cfg.cpp.
 
     // --- MODE params (`mode_params` table) ---
     // Parameter<int32_t> p_mode_squelch{
@@ -534,7 +520,7 @@ class SettingsManager {
     // Computed parameter: front-panel ("FG") frequency = the frequency of the
     // active VFO of the current band. Constructed with compute/reverse closures
     // in the SettingsManager ctor (no default ctor exists).
-    ComputedParameter<int32_t> cp_fg_freq;
+    ComputedParameter<int64_t> cp_fg_freq;
 
     // Computed parameter: the mode of the active VFO of the current band.
     // Analogous to cp_fg_freq: p_band_current_vfo selects between the VFO A/B
@@ -548,7 +534,7 @@ class SettingsManager {
     ComputedParameter<int32_t> cp_cur_att;
     ComputedParameter<int32_t> cp_cur_pre;
     ComputedParameter<int32_t> cp_cur_agc;
-    ComputedParameter<int32_t> cp_bg_freq;
+    ComputedParameter<int64_t> cp_bg_freq;
 
     // Computed mode LO offset: CW → -key_tone, CWR → +key_tone, else 0.
     // Driven by cp_cur_mode and p_key_tone.
@@ -630,65 +616,57 @@ class SettingsManager {
     // The other VFO. With independent VFOs on, the band this VFO is on is kept for it and the
     // other VFO's band is loaded (its frequency and mode come with the band's record).
     void vfo_toggle();
-    void band_follow(int32_t freq);    // the band the active VFO's frequency lies in, implicitly
+    void band_follow(int64_t freq);    // the band the active VFO's frequency lies in, implicitly
 
     // The TX shift of the current band, Hz (Settings, the web Bands page): split comes on with a shift, off with 0
     void tx_shift_set(int32_t hz);
 
-    // Transverter shift for a frequency: the shift of the transverter whose
-    // [from, to] range contains `freq`, or 0 when no transverter covers it.
-    // A transverter with a shift of 0 is off and covers nothing.
-    int32_t transverter_shift_for(int32_t freq) const {
-        if (p_transverter_0_shift.get() && freq >= p_transverter_0_from.get() && freq <= p_transverter_0_to.get())
-            return p_transverter_0_shift.get();
-        if (p_transverter_1_shift.get() && freq >= p_transverter_1_from.get() && freq <= p_transverter_1_to.get())
-            return p_transverter_1_shift.get();
-        return 0;
-    }
+    // What the radio can do somewhere in [lo, hi]: a transverter's tunable slice
+    // first (it wins where it overlaps HF or the WR12; RX-only stays receive),
+    // else TX on HF 0.1-55 MHz, else RX where the X6200 receives (FM broadcast
+    // and airband; 54 MHz-1 GHz with the WR12 on). The slice is the part of
+    // the transverter's range that maps into the HF IF, not the whole ADIF band.
+    band_use_t band_use(int64_t lo, int64_t hi) const {
+        auto in = [lo, hi](int64_t a, int64_t b) { return lo <= b && hi >= a; };
+        int  u  = cfg_xvtr_span_use(lo, hi);
 
-    // What the radio can do somewhere in [lo, hi]: TX where HF 0.1-55 MHz or a transverter with a shift covers part
-    // of it, else RX where the X6200 receives (its FM broadcast and airband; 54 MHz-1 GHz with the WR12 on), else
-    // nothing. A transverter wins where they overlap. Bands-table ranges are informational only.
-    band_use_t band_use(int32_t lo, int32_t hi) const {
-        auto in = [lo, hi](int32_t a, int32_t b) { return lo <= b && hi >= a; };
-
-        if (in(HF_MIN_FREQ, HF_MAX_FREQ)
-            || (p_transverter_0_shift.get() && in(p_transverter_0_from.get(), p_transverter_0_to.get()))
-            || (p_transverter_1_shift.get() && in(p_transverter_1_from.get(), p_transverter_1_to.get())))
-            return BAND_USE_TX;
+        if (u == XVTR_USE_TX) return BAND_USE_TX;
+        if (u == XVTR_USE_RX) return BAND_USE_RX;
+        if (in(HF_MIN_FREQ, HF_MAX_FREQ)) return BAND_USE_TX;
         if (HAS_VHF_RX && (in(VHF_RX_MIN_FREQ, VHF_RX_MAX_FREQ) || (p_wr12.get() && in(WR12_MIN_FREQ, WR12_MAX_FREQ))))
             return BAND_USE_RX;
         return BAND_USE_NONE;
     }
 
     // True when `freq` is usable by the hardware, to receive at least
-    bool is_valid_hw_freq(int32_t freq) const { return band_use(freq, freq) != BAND_USE_NONE; }
-    // The radio receives `freq` but must not transmit there (the X6200's FM broadcast and airband, the WR12)
-    bool is_rx_only_freq(int32_t freq) const { return band_use(freq, freq) == BAND_USE_RX; }
+    bool is_valid_hw_freq(int64_t freq) const { return band_use(freq, freq) != BAND_USE_NONE; }
+    // The radio receives `freq` but must not transmit there (the X6200's FM broadcast and airband, the WR12,
+    // an RX-only transverter)
+    bool is_rx_only_freq(int64_t freq) const { return band_use(freq, freq) == BAND_USE_RX; }
     // The radio transmits on `freq`
-    bool is_tx_freq(int32_t freq) const { return band_use(freq, freq) == BAND_USE_TX; }
+    bool is_tx_freq(int64_t freq) const { return band_use(freq, freq) == BAND_USE_TX; }
 
     // If `freq` is hardware-usable, return it unchanged. Otherwise clamp to the
     // nearest boundary of any hardware-usable frequency range (HF 0.1-55 MHz,
-    // the transverters that are on, the X6200's receive ranges).
-    int32_t clamp_to_valid_hw_freq(int32_t freq) const;
+    // each enabled transverter slice, the X6200's receive ranges).
+    int64_t clamp_to_valid_hw_freq(int64_t freq) const;
 
     // The mode a frequency opens in when its band has none saved: its sideband, LSB under 10 MHz and USB above
     // (and on 60 m, where USB is used); wide FM and AM on the X6200's FM broadcast and airband, NFM where only the
-    // WR12 receives
-    int32_t default_mode(int32_t freq) const;
+    // WR12 receives. A transverter that transmits opens in USB above 10 MHz.
+    int32_t default_mode(int64_t freq) const;
 
   private:
     // active VFO frequency of the current band (compute fn for cp_fg_freq).
-    int32_t fg_freq_get();
+    int64_t fg_freq_get();
 
     // reverse fn for cp_fg_freq: writes freq into the active VFO param.
-    void fg_freq_set(int32_t freq);
+    void fg_freq_set(int64_t freq);
 
     // compute/reverse fns for cp_bg_freq: the background (inactive) VFO's
     // frequency, i.e. the complement of the active VFO.
-    int32_t bg_freq_get();
-    void    bg_freq_set(int32_t freq);
+    int64_t bg_freq_get();
+    void    bg_freq_set(int64_t freq);
 
     // active VFO mode of the current band (compute fn for cp_cur_mode).
     int32_t cur_mode_get();
@@ -777,7 +755,7 @@ class SettingsManager {
     void load_band_vfo(int band_id, bool implicit);
 
     // Default mode for a band with none saved: default_mode(freq), AM in the broadcast bands
-    int32_t resolve_default_mode(int32_t freq, int32_t band_id) const;
+    int32_t resolve_default_mode(int64_t freq, int32_t band_id) const;
 
     // Default 50-char encoder-bind string (all NONE except the documented
     // VOL/MFK positions). Static: callable from the ctor init list.

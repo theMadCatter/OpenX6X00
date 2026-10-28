@@ -14,6 +14,8 @@
  *  for the whole beacon); each decode runs in a thread of its own, with a
  *  copy of the samples, so a slow decode never delays the next beacon.
  *  The UI is updated by a timer (state) and scheduler_put (spots).
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_wspr.h"
@@ -320,7 +322,7 @@ static void *cycle_thread_cb(void *arg) {
                 tx = NULL;
             }
             prepared = false;
-            dial_hz  = cparam_i_get(cfg_fg_freq);
+            dial_hz  = cparam_hz_get(cfg_fg_freq);
             wspr_bb_reset(bb);
 
             int old = atomic_load(&state);
@@ -453,7 +455,7 @@ static void decoded_cb(void *arg) {
 
 void dialog_wspr_show_spots(const wspr_spot_t *spots, int n) {
     decoded_t res = {.gen = atomic_load(&gen), .cycle = (time_t)(now_s() / CYCLE_S) * CYCLE_S,
-                     .dial_hz = cparam_i_get(cfg_fg_freq), .n = n};
+                     .dial_hz = cparam_hz_get(cfg_fg_freq), .n = n};
 
     memcpy(res.spots, spots, sizeof(wspr_spot_t) * (n < MAX_SPOTS ? n : MAX_SPOTS));
     decoded_cb(&res);
@@ -466,7 +468,7 @@ static void timer_cb(lv_timer_t *t) {
     int    st  = atomic_load(&state);
     int    dbm = param_i_get(cfg_wspr_dbm);
 
-    lv_label_set_text_fmt(frame.head_left, "%s   %.4f MHz", cfg_digital_label_get(), cparam_i_get(cfg_fg_freq) / 1e6);
+    lv_label_set_text_fmt(frame.head_left, "%s   %.4f MHz", cfg_digital_label_get(), cparam_hz_get(cfg_fg_freq) / 1e6);
 
     switch (st) {
         case ST_RX:

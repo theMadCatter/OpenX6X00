@@ -9,6 +9,7 @@
 // dragging the MFK carries the channel up and down the list, Drop writes the new order.
 //
 // Copyright (c) 2026 Giovanni Ricciardi IU1WXY, own code of the IU1WXY firmware
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "dialog_channels.h"     /* dialog_channels */
 
@@ -188,7 +189,7 @@ static bool tune(int16_t row, bool close) {
     if (!c) return false;
 
     recalled = row;
-    cparam_i_set(cfg_fg_freq, c->freq);
+    cparam_hz_set(cfg_fg_freq, c->freq);
     cparam_i_set(cfg_cur_mode, c->mode);
     cparam_i_set(cfg_cur_agc, c->agc);
     cparam_i_set(cfg_cur_pre, c->pre ? radio_pre_on : radio_pre_off);

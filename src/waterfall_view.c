@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  *
  *  The waterfall: the DSP's rows kept with the frequency each was taken at, drawn
  *  around the frequency shown now (it slides while tuning), with the VFO line and the
@@ -538,8 +539,8 @@ int32_t waterfall_view_shift(void) {
         view_fixed = false;
         return 0;
     }
-    int32_t rc = cparam_i_get(cfg_fg_freq) - param_i_get(cfg_band_if_shift);
-    int32_t vfo = cparam_i_get(cfg_fg_freq);
+    int32_t rc = cparam_hz_get(cfg_fg_freq) - param_i_get(cfg_band_if_shift);
+    int32_t vfo = cparam_hz_get(cfg_fg_freq);
     int32_t half = SPAN_HZ / 2 / param_i_get(cfg_mode_zoom);
 
     /* The received data (centred on rc) within a quarter of the span of the centre: the side
@@ -681,7 +682,7 @@ static void on_if_shift_changed(Subject *subj, void *user_data) {
     skip_rows = 2;
     retuned = true;
     if_shift = subject_i_get((SubjectInt *)subj);
-    radio_center_freq = cparam_i_get(cfg_fg_freq) - if_shift;
+    radio_center_freq = cparam_hz_get(cfg_fg_freq) - if_shift;
     update_middle_line();
 }
 

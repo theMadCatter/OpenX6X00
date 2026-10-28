@@ -6,6 +6,8 @@
  *  Walkie Talkie: a portrait screen (480x800, the knobs on top) in place of
  *  the main one, which is still built and does the radio work unseen. On and
  *  off live: built the first time, then kept.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "walkie.h"
@@ -263,7 +265,7 @@ static void wch_recall(int i) {
 
     if (!c->freq)
         return;
-    cparam_i_set(cfg_fg_freq, c->freq);
+    cparam_hz_set(cfg_fg_freq, c->freq);
     cparam_i_set(cfg_cur_mode, c->mode);
     cparam_i_set(cfg_cur_agc, c->agc);
     cparam_i_set(cfg_cur_pre, c->pre ? radio_pre_on : radio_pre_off);
@@ -317,7 +319,7 @@ static void store_cb(button_data_t *d) {
     channel_t *c = &wch[param_i_get(cfg_walkie_ch)];
 
     *c = (channel_t){
-        .freq = cparam_i_get(cfg_fg_freq),
+        .freq = cparam_hz_get(cfg_fg_freq),
         .mode = cparam_i_get(cfg_cur_mode),
         .agc  = cparam_i_get(cfg_cur_agc),
         .pre  = cparam_i_get(cfg_cur_pre) != 0,
@@ -453,13 +455,13 @@ static void update_cb(lv_timer_t *t) {
     }
     set_text(chan_label, buf);
 
-    split_freq(cparam_i_get(cfg_fg_freq), &mhz, &khz, &hz);
+    split_freq(cparam_hz_get(cfg_fg_freq), &mhz, &khz, &hz);
     snprintf(buf, sizeof(buf), "%i.%03i.%03i", mhz, khz, hz);
     freq_set(buf);
 
     /* No repeater offset or tone in this firmware: split is the TX on the other VFO */
     if (param_i_get(cfg_band_split)) {
-        split_freq(cparam_i_get(cfg_bg_freq), &mhz, &khz, &hz);
+        split_freq(cparam_hz_get(cfg_bg_freq), &mhz, &khz, &hz);
         snprintf(buf, sizeof(buf), "%s - SPLIT %i.%03i.%03i", info_params_mode_label_get(), mhz, khz, hz);
     } else {
         snprintf(buf, sizeof(buf), "%s", info_params_mode_label_get());
@@ -469,7 +471,7 @@ static void update_cb(lv_timer_t *t) {
     /* The bandscope: the main screen's spectrum data and drawing (spectrum.c), 10 frames/s */
     float   vfo_at;
     int32_t span = spectrum_span(&vfo_at);
-    int32_t lo = cparam_i_get(cfg_fg_freq) - (int32_t)(span * vfo_at);
+    int64_t lo = cparam_hz_get(cfg_fg_freq) - (int64_t)(span * vfo_at);
 
     snprintf(buf, sizeof(buf), "%.3f", lo / 1e6);
     set_text(scope_lo, buf);

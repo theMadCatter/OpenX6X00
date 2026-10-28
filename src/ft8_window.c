@@ -3,6 +3,7 @@
  *  Xiegu X6100 LVGL GUI - the FT8 / FT4 / FT2 window
  *
  *  Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  *
  *  Waterfall with the TX frequency marker, the message list over it (ft8/table_view.c), four
  *  pages of buttons. Decoding runs in ft8/audio_worker.c; its callbacks below run on that
@@ -252,11 +253,11 @@ static void udp_status(void) {
     char dx[16];
 
     udp_dx_call(dx);
-    ft8_udp_send_status((uint64_t)cparam_i_get(cfg_fg_freq), mode_name(), params.callsign.x, station_qth(), dx,
+    ft8_udp_send_status((uint64_t)cparam_hz_get(cfg_fg_freq), mode_name(), params.callsign.x, station_qth(), dx,
                         params.ft8_tx_freq.x, params.ft8_tx_freq.x, sending, !sending);
     udp_sent.sending = sending;
     udp_sent.df      = params.ft8_tx_freq.x;
-    udp_sent.dial    = cparam_i_get(cfg_fg_freq);
+    udp_sent.dial    = cparam_hz_get(cfg_fg_freq);
     snprintf(udp_sent.dx, sizeof(udp_sent.dx), "%s", dx);
 }
 
@@ -269,7 +270,7 @@ static void udp_check_cb(lv_timer_t *t) {
 
         udp_dx_call(dx);
         if (sending == udp_sent.sending && params.ft8_tx_freq.x == udp_sent.df &&
-            cparam_i_get(cfg_fg_freq) == udp_sent.dial && !strcmp(dx, udp_sent.dx))
+            cparam_hz_get(cfg_fg_freq) == udp_sent.dial && !strcmp(dx, udp_sent.dx))
             return;
     }
     udp_status();
@@ -358,7 +359,7 @@ static void save_qso(const done_qso_t *d) {
     const char *call = d->call, *grid = d->grid;
     const int   rcvd = d->rcvd, sent = d->sent;
     time_t now = time(NULL);
-    int64_t dial = cparam_i_get(cfg_fg_freq);
+    int64_t dial = cparam_hz_get(cfg_fg_freq);
     char  *canon = util_canonize_callsign(call, false);
 
     qso_log_record_t rec = qso_log_record_create(params.callsign.x, canon, now, proto()->log_mode, sent, rcvd,
@@ -375,7 +376,7 @@ static void save_qso(const done_qso_t *d) {
     saved_job_t job = {.rec = rec, .ui = {.cursor_off = true, .tx_gen = d->tx_gen, .win_gen = win_gen}};
 
     gui_post(save_qso_apply, &job, sizeof(job));
-    ft8_udp_log_qso(now, rec.remote_call, grid, (uint64_t)cparam_i_get(cfg_fg_freq), mode_name(), sent, rcvd,
+    ft8_udp_log_qso(now, rec.remote_call, grid, (uint64_t)cparam_hz_get(cfg_fg_freq), mode_name(), sent, rcvd,
                     (int)param_f_get(cfg_pwr), params.callsign.x, station_qth());
 
     if (strlen(grid) >= 4) {
@@ -579,7 +580,7 @@ static void load_base(void) {
         return;
     }
     int32_t mode = cparam_i_get(cfg_cur_mode);
-    cparam_i_set(cfg_fg_freq, params.ft8_custom_hz.x);
+    cparam_hz_set(cfg_fg_freq, params.ft8_custom_hz.x);
     if (cparam_i_get(cfg_cur_mode) != mode) cparam_i_set(cfg_cur_mode, mode); /* another band loads its own mode */
     msg_update_text_fmt("%s", where_label());
 }
@@ -954,7 +955,7 @@ static void preset_cb(lv_event_t *e) {
     freq_close();
     if (i < 0) return;   /* Close */
     params_bool_set(&params.ft8_custom_on, false);
-    cparam_i_set(cfg_fg_freq, presets[i].freq);
+    cparam_hz_set(cfg_fg_freq, presets[i].freq);
     load_band(0);
     retuned();
     buttons_refresh(&button_freq);
@@ -1368,7 +1369,7 @@ static void add_rx_text(int16_t snr, const char *text, bool odd, float freq_hz, 
         js8_map_heard(meta.call_de, meta.grid, snr, meta.to_me, &rx, sizeof(rx));
         if (param_i_get(cfg_pskreporter)) {
             pskr_spot(params.callsign.x, station_qth(), VERSION, meta.call_de, meta.grid,
-                      (uint32_t)cparam_i_get(cfg_fg_freq) + (uint32_t)(freq_hz + 0.5f), snr, mode_name());
+                      cparam_hz_get(cfg_fg_freq) + (int64_t)(freq_hz + 0.5f), snr, mode_name());
         }
     }
 
@@ -1385,7 +1386,7 @@ static void add_rx_text(int16_t snr, const char *text, bool odd, float freq_hz, 
 
     if (meta.type == FTX_MSG_TYPE_CQ)
         row.worked_type = qso_log_search_worked(meta.call_de, proto()->log_mode,
-                                                qso_log_freq_to_band(cparam_i_get(cfg_fg_freq)));
+                                                qso_log_freq_to_band(cparam_hz_get(cfg_fg_freq)));
     row.pota = meta.call_de[0] && (!strncmp(text, "CQ POTA ", 8) || pota_spotted(meta.call_de));
     snprintf(row.text, sizeof(row.text), "%s %s", slot_time, text);
     if (parsed) set_country(&row, meta.call_de);

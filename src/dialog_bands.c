@@ -7,6 +7,8 @@
  *  two columns of bands with their activity bar, cluster and RBN spot counts and who heard
  *  you; the MFK chooses a band, a press tunes a typical frequency of it. Test beacon sends
  *  TEST DE <call> in CW so the skimmers show who hears you.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_bands.h"
@@ -119,7 +121,7 @@ static void fill(void) {
 static void timer_cb(lv_timer_t *t) {
     static int ticks;
 
-    lv_label_set_text_fmt(frame.head_left, "BANDS   %.4f MHz", cparam_i_get(cfg_fg_freq) / 1e6);
+    lv_label_set_text_fmt(frame.head_left, "BANDS   %.4f MHz", cparam_hz_get(cfg_fg_freq) / 1e6);
     lv_label_set_text_fmt(frame.head_right, "RBN %s", field_rbn_state());
     if (!t || ++ticks % 5 == 0)
         fill();
@@ -241,7 +243,7 @@ static void construct_cb(lv_obj_t *parent) {
 
     if (params.callsign.x[0])
         field_rbn_start(params.callsign.x);
-    sel = field_band_of(cparam_i_get(cfg_fg_freq));
+    sel = field_band_of(cparam_hz_get(cfg_fg_freq));
     if (sel < 0)
         sel = 0;
     timer_cb(NULL);

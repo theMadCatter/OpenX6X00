@@ -6,6 +6,8 @@
  *  FT8/FT4/WSPR (the big digits stay on the dial, as WSJT-X). Always shown; the app dialogs start
  *  below it. A line under the digit the tuning step changes, and NR NB DNF (RIT XIT when set)
  *  over the locator, as upstream v1.0.0's step marker and indicators row.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include <stdbool.h>
@@ -219,7 +221,7 @@ static void update_cb(Subject *subj, void *user_data) {
     (void)subj;
     (void)user_data;
     uint16_t mhz, khz, hz;
-    int32_t  f = cparam_i_get(cfg_fg_freq);
+    int64_t  f = cparam_hz_get(cfg_fg_freq);
 
     bc_lookup(f);
 
@@ -233,7 +235,7 @@ static void update_cb(Subject *subj, void *user_data) {
         char        tail[32] = "";
 
         if (shift) snprintf(tail, sizeof(tail), "  #%06x %s#", theme_hex(blocked ? TC_err : TC_info), shift);
-        split_freq(cparam_i_get(cfg_bg_freq), &mhz2, &khz2, &hz2);
+        split_freq(cparam_hz_get(cfg_bg_freq), &mhz2, &khz2, &hz2);
         lv_label_set_text_fmt(freq_label, "%i.%03i", mhz, khz);
         lv_label_set_text_fmt(freq_small, ".%02i", hz / 10);
         lv_label_set_text_fmt(other_label, "#%06x %s#  #%06x %i.%03i.%02i#%s", theme_hex(TC_text), b ? "A" : "B",
@@ -242,14 +244,20 @@ static void update_cb(Subject *subj, void *user_data) {
         lv_label_set_text_fmt(band_label, "#%06x %s#", theme_hex(TC_accent), app);   /* the open app only */
     } else if (param_i_get(cfg_band_split)) {
         uint16_t mhz2, khz2, hz2;
-        split_freq(cparam_i_get(cfg_bg_freq), &mhz2, &khz2, &hz2);
+        split_freq(cparam_hz_get(cfg_bg_freq), &mhz2, &khz2, &hz2);
         if (theme_shape.mono) lv_obj_set_style_text_font(freq_label, &sony_36, 0);   /* both fit, 23 cells */
-        lv_label_set_text_fmt(freq_label, "%i.%03i.%03i / %i.%03i.%03i", mhz, khz, hz, mhz2, khz2, hz2);
+        if (mhz >= 1000 || mhz2 >= 1000)
+            lv_label_set_text_fmt(freq_label, "%u.%03u / %u.%03u", mhz, khz, mhz2, khz2);
+        else
+            lv_label_set_text_fmt(freq_label, "%i.%03i.%03i / %i.%03i.%03i", mhz, khz, hz, mhz2, khz2, hz2);
     } else {
         extern const lv_font_t pixel_freq_40;
 
         if (theme_shape.mono) lv_obj_set_style_text_font(freq_label, &pixel_freq_40, 0);
-        lv_label_set_text_fmt(freq_label, "%i.%03i.%03i", mhz, khz, hz);
+        if (mhz >= 1000)
+            lv_label_set_text_fmt(freq_label, "%u.%03u", mhz, khz); /* 10368.100, 24048.100 */
+        else
+            lv_label_set_text_fmt(freq_label, "%i.%03i.%03i", mhz, khz, hz);
     }
     /* An open app: the band (a broadcast has nothing to do with the digital apps) */
     const char *band = note[0] && f == note_freq ? note : bc[0] && !app[0] ? bc : cluster_band_name(cluster_band_of(f));

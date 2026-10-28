@@ -5,6 +5,8 @@
  *
  *  CW receive: RX audio -> cw::Receiver (src/cw_decoder/) -> squelch -> panel,
  *  trainer or remote clients; the locked tone drives the tuning indicator.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 // First: the decoder headers bring <complex>, which liquid.h must see before
@@ -61,7 +63,7 @@ static size_t              freq_hist_w = 0;
 static size_t              freq_hist_n = 0;
 static uint8_t             frame_counter = 0;
 static std::atomic<float>  rx_shift{0.0f};   /* audio Hz the VFO moved, for the audio thread */
-static int32_t             last_freq;
+static int64_t             last_freq;
 static int                 wpm_sent = 0;
 
 /* Squelch: noise keys the detector now and then and prints lone Es, Ts and Is. A character counts
@@ -112,8 +114,8 @@ void cw_init(void) {
  * VFO lowers the tone), CW-R the lower one. Big jumps (band, memory) are left to
  * the tracker: the station is gone anyway. */
 static void on_freq_change(Subject *subj, void *user_data) {
-    int32_t freq = cfg_sm.cp_fg_freq.get();
-    int32_t d    = freq - last_freq;
+    int64_t freq = cfg_sm.cp_fg_freq.get();
+    int64_t d    = freq - last_freq;
     int32_t mode = cfg_sm.cp_cur_mode.get();
 
     last_freq = freq;

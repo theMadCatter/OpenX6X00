@@ -4,11 +4,13 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "info_bar.h"
 
 #include "cfg/cfg_api.h"
+#include "cfg/xvtr_cfg.h"
 #include "gui_styles.h"
 #include "radio.h"
 #include "theme.h"
@@ -498,7 +500,7 @@ static void atu_update(Subject *subj, void *user_data) {
 
     if (!param_i_get(cfg_atu_enabled))
         pill_set(o, false);
-    else if (cfg_transverter_shift_for(cparam_i_get(cfg_fg_freq)))
+    else if (cfg_xvtr_for_rf(cparam_hz_get(cfg_fg_freq), NULL))
         pill_paint(o, TC(text_soft), TC(focus), LV_OPA_20);
     else
         pill_paint(o, cfg_atu_is_loaded() ? TC(focus_text) : TC(err_strong), TC(focus), PILL_ON_OPA);

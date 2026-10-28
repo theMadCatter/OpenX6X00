@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI - frequency entry: F-INP on the hand mic or 'f' on a keyboard
  *
  *  Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "freq_entry.h"
@@ -18,6 +19,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static lv_obj_t *entry;
 
@@ -31,10 +33,10 @@ dialog_t *dialog_freq = &dialog;
 /* MHz as typed, "7.074" or ".5"; nothing typed changes nothing */
 static void tune_to_entry(void) {
     const char  *mhz = lv_textarea_get_text(entry);
-    int32_t     hz;
+    int64_t     hz;
 
     if (!*mhz) return;
-    hz = atof(mhz) * 1000000L;
+    hz = llround(atof(mhz) * 1000000.0);
     if (radio_check_freq(hz))
         main_screen_set_freq(hz);
     else
@@ -74,7 +76,7 @@ static void open_cb(lv_obj_t *parent) {
 
     lv_textarea_set_one_line(entry, true);
     lv_textarea_set_accepted_chars(entry, "0123456789.");
-    lv_textarea_set_max_length(entry, 9);
+    lv_textarea_set_max_length(entry, 14); /* "24250.123" and a little spare */
     lv_textarea_set_placeholder_text(entry, "Freq in MHz");
     lv_obj_clear_flag(entry, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_set_style_text_font(entry, &sony_44, 0);

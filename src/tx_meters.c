@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "tx_meters.h"
@@ -153,7 +154,7 @@ static lv_obj_t *make_label(lv_obj_t *parent, const lv_font_t *font, uint32_t co
 
 static void update_head(void) {
     uint32_t  s    = lv_tick_elaps(tx_start) / 1000;
-    int32_t   f    = radio_tx_freq();      /* in split the other VFO's, or the TX shift's */
+    int64_t   f    = radio_tx_freq();      /* in split the other VFO's, or the TX shift's */
     uint16_t  mhz, khz, hz;
 
     split_freq(f, &mhz, &khz, &hz);

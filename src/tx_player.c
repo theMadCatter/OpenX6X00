@@ -3,6 +3,7 @@
 // Xiegu X6100 LVGL GUI - digital-mode TX player (tx_player.h)
 //
 // Copyright (c) 2026 Giovanni Ricciardi IU1WXY, own code of the IU1WXY firmware
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "tx_player.h"           /* tx_fill_fn_t, TX_PLAYER_* */
 
@@ -116,7 +117,7 @@ bool tx_player_stream(tx_fill_fn_t fill, void *fill_ctx, int32_t offset_hz, floa
     float   drive = total - codec;
 
     /* The VFO that transmits moves for the tone: the other one in split (a TX shift), the IF shift put back after */
-    int32_t dial = radio_tx_freq();
+    int64_t dial = radio_tx_freq();
 
     radio_set_tx_freq(dial + offset_hz - TX_PLAYER_AUDIO_HZ);
     radio_set_modem(true);      /* keyed, the audio from the GUI */

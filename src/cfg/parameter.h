@@ -71,6 +71,7 @@ class WriteSink {
   public:
     virtual ~WriteSink()                                                = default;
     virtual void write(const StorageKey &key, int32_t value)            = 0;
+    virtual void write(const StorageKey &key, int64_t value)            = 0;
     virtual void write(const StorageKey &key, float value)              = 0;
     virtual void write(const StorageKey &key, const std::string &value) = 0;
 };
@@ -169,6 +170,8 @@ class Parameter : public SubjectT<ValueType>, public ParamBase {
         std::optional<DbType> res;
         if constexpr (std::is_same_v<DbType, int32_t>) {
             res = policy.load_int(context_id, db_name_);
+        } else if constexpr (std::is_same_v<DbType, int64_t>) {
+            res = policy.load_i64(context_id, db_name_);
         } else if constexpr (std::is_same_v<DbType, float>) {
             res = policy.load_float(context_id, db_name_);
         } else if constexpr (std::is_same_v<DbType, std::string>) {
@@ -193,6 +196,8 @@ class Parameter : public SubjectT<ValueType>, public ParamBase {
         const DbType   db_value = to_db_value(SubjectT<ValueType>::get());
         if constexpr (std::is_same_v<DbType, int32_t>) {
             return policy.save_int(context_id, db_name_, db_value);
+        } else if constexpr (std::is_same_v<DbType, int64_t>) {
+            return policy.save_i64(context_id, db_name_, db_value);
         } else if constexpr (std::is_same_v<DbType, float>) {
             return policy.save_float(context_id, db_name_, db_value);
         } else if constexpr (std::is_same_v<DbType, std::string>) {

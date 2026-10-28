@@ -30,6 +30,7 @@
  *  through the socket; Pat runs with ptt_ctrl false), \chk_vfo, \quit (q); anything else RPRT -11.
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE     /* accept4 */
@@ -436,7 +437,7 @@ static bool tx_abort(void *ctx) {
     bool    quit  = atomic_load(&ses.quit);
     bool    limit = now_ms() - ses.key_ms > KEY_LIMIT_MS;
     int32_t tx    = radio_tx_freq() + param_i_get(cfg_xit);
-    bool    moved = tx != ses.key_hz || cparam_i_get(cfg_fg_freq) != ses.key_hz;
+    bool    moved = tx != ses.key_hz || cparam_hz_get(cfg_fg_freq) != ses.key_hz;
 
     if (!quit && !limit && !moved)
         return false;
@@ -492,7 +493,7 @@ static const char *tx_off_freq(void) {
     uint64_t    now;
 
     rig_pending_tune();     /* a QSY Pat asked during the last key: this one goes out there */
-    rx     = cparam_i_get(cfg_fg_freq);
+    rx     = cparam_hz_get(cfg_fg_freq);
     tx     = radio_tx_freq();
     xit    = param_i_get(cfg_xit);
     rit    = param_i_get(cfg_rit);
@@ -813,7 +814,7 @@ static void tune_cb(void *arg) {
         int32_t mode;
 
         backlight_tick();   /* tuned from a program: the screen wakes as for a key */
-        if (f != cparam_i_get(cfg_fg_freq))
+        if (f != cparam_hz_get(cfg_fg_freq))
             main_screen_set_freq((uint64_t)f);
         mode = cparam_i_get(cfg_cur_mode);
         if (mode != radio_mode_usb && mode != radio_mode_usb_dig && !main_screen_mode_locked())
@@ -845,7 +846,7 @@ static int rig_do_tune(int32_t f) {
             return -5;  /* RIG_ETIMEOUT: the LVGL thread busy */
         usleep(5000);
     }
-    return cparam_i_get(cfg_fg_freq) == f ? 0 : -9;
+    return cparam_hz_get(cfg_fg_freq) == f ? 0 : -9;
 }
 
 /* A QSY kept while on the air, now that it is over (the rig thread) or before the next key (the
@@ -904,7 +905,7 @@ static bool rig_answer(const char *line, char *reply, size_t size) {
         case RIG_NONE:
             break;
         case RIG_GET_FREQ:
-            snprintf(reply, size, "%d\n", (int)cparam_i_get(cfg_fg_freq));
+            snprintf(reply, size, "%d\n", (int)cparam_hz_get(cfg_fg_freq));
             break;
         case RIG_SET_FREQ:
             snprintf(reply, size, "RPRT %d\n", rig_tune(arg));

@@ -12,6 +12,7 @@
 // file and a rename, since the web configurator may read the file at any moment.
 //
 // Copyright (c) 2026 Giovanni Ricciardi IU1WXY, own code of the IU1WXY firmware
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "channel_list.h"
 #include "board.h"
@@ -275,7 +276,7 @@ bool channels_add_current(void) {
     channel_t *c = &list[list_len];
 
     memset(c, 0, sizeof(*c));
-    c->freq = cparam_i_get(cfg_fg_freq);
+    c->freq = cparam_hz_get(cfg_fg_freq);
     c->mode = cparam_i_get(cfg_cur_mode);
     c->agc = cparam_i_get(cfg_cur_agc);
     c->pre = cparam_i_get(cfg_cur_pre) != 0;

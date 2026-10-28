@@ -10,6 +10,7 @@
 // db.h/db.cpp, so no sqlite3* is stored here. Class names are PascalCase
 // (StoragePolicy, GlobalStorage...), methods snake_case, as required by the
 // project rules.
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include <cstdint>
 #include <optional>
@@ -36,6 +37,21 @@ class StoragePolicy {
     // int32_t
     virtual int                    save_int(int context_id, const char *name, int32_t value) = 0;
     virtual std::optional<int32_t> load_int(int context_id, const char *name)                = 0;
+
+    // int64_t. Only the band VFO frequencies need it (10 GHz, 24 GHz). The
+    // default refuses the write so a table that has no 64-bit column path
+    // cannot silently drop a frequency. BandStorage overrides these.
+    virtual int                    save_i64(int context_id, const char *name, int64_t value) {
+        (void)context_id;
+        (void)name;
+        (void)value;
+        return WRONG_TYPE;
+    }
+    virtual std::optional<int64_t> load_i64(int context_id, const char *name) {
+        (void)context_id;
+        (void)name;
+        return std::nullopt;
+    }
 
     // float
     virtual int                  save_float(int context_id, const char *name, float value) = 0;
@@ -64,6 +80,9 @@ class BandStorage : public StoragePolicy {
   public:
     int                    save_int(int context_id, const char *name, int32_t value) override;
     std::optional<int32_t> load_int(int context_id, const char *name) override;
+
+    int                    save_i64(int context_id, const char *name, int64_t value) override;
+    std::optional<int64_t> load_i64(int context_id, const char *name) override;
 
     int                  save_float(int context_id, const char *name, float value) override;
     std::optional<float> load_float(int context_id, const char *name) override;

@@ -2,6 +2,8 @@
  *  SPDX-License-Identifier: LGPL-2.1-or-later
  *
  *  DX cluster telnet client.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE /* strcasestr */
@@ -344,9 +346,25 @@ static uint8_t parse_modes(char *list) {
 static uint16_t parse_bands(char *list) {
     uint16_t bits = 0;
     for (char *save, *w = strtok_r(list, ",", &save); w; w = strtok_r(NULL, ",", &save)) {
-        int m = atoi(w);
-        for (int b = 0; m > 0 && b < 16; b++)
-            if (atoi(cluster_band_name(b)) == m) bits |= (uint16_t)(1u << b);
+        /* "6cm" is 6 cm. A digits-only token is the meter band ("6" is 6 m, not 6 cm).
+         * Indexes at or above 16 do not fit this mask; those bands are still matched
+         * by cluster_band_of() when the filter is "this band". */
+        int m = -1;
+        for (int b = 0; cluster_band_name(b)[0]; b++)
+            if (strcasecmp(w, cluster_band_name(b)) == 0) { m = b; break; }
+        if (m < 0) {
+            const char *p = w;
+            while (*p && isdigit((unsigned char)*p)) p++;
+            if (*p == '\0' && w[0]) {
+                int num = atoi(w);
+                for (int b = 0; cluster_band_name(b)[0]; b++) {
+                    const char *n = cluster_band_name(b);
+                    if (strstr(n, "cm")) continue;
+                    if (atoi(n) == num) { m = b; break; }
+                }
+            }
+        }
+        if (m >= 0 && m < 16) bits |= (uint16_t)(1u << m);
     }
     return bits;
 }
@@ -1014,7 +1032,7 @@ static void *pota_cb(void *arg) {
             }
             if (n < 5 || strlen(fld[4]) != 4) continue;
             memset(&sp, 0, sizeof(sp));
-            sp.freq_hz = atoi(fld[0]);
+            sp.freq_hz = strtoll(fld[0], NULL, 10);
             snprintf(sp.dx, sizeof(sp.dx), "%s", fld[1]);
             snprintf(sp.spotter, sizeof(sp.spotter), "%s", fld[2]);
             snprintf(sp.comment, sizeof(sp.comment), "%s", fld[3]);

@@ -4,6 +4,7 @@
 // initialisation, deferred-write flushing, band/VFO switching, frequency-step
 // cycling and hardware-frequency helpers. Parameter value accessors are in
 // parameter_api.h.
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,19 +26,16 @@ typedef enum {
     BAND_USE_TX,            /* receive and transmit: HF, a transverter with a shift */
 } band_use_t;
 
-// Transverter shift for a frequency: the shift of the transverter whose
-// [from, to] range contains freq, or 0 when none covers it (a shift of 0 is off).
-int32_t cfg_transverter_shift_for(int32_t freq);
-
-/* What the radio can do somewhere in [start, stop] (Hz; start == stop for one frequency) */
-band_use_t cfg_band_use(int32_t start, int32_t stop);
-// True when freq is usable by the hardware: HF 0.1-55 MHz, a transverter's
-// range, the X6200's receive ranges.
-bool cfg_is_valid_hw_freq(int32_t freq);
-/* Received but never transmitted on: the X6200's FM broadcast and airband, the WR12's range */
-bool cfg_is_rx_only_freq(int32_t freq);
-/* Transmitted on: HF, a transverter with a shift */
-bool cfg_is_tx_freq(int32_t freq);
+/* What the radio can do somewhere in [start, stop] (Hz; start == stop for one frequency).
+ * A transverter is judged on the slice that maps into the HF IF. */
+band_use_t cfg_band_use(int64_t start, int64_t stop);
+// True when freq is usable by the hardware: HF 0.1-55 MHz, a transverter slice,
+// the X6200's receive ranges.
+bool cfg_is_valid_hw_freq(int64_t freq);
+/* Received but never transmitted on: the X6200's FM broadcast and airband, the WR12, an RX-only transverter */
+bool cfg_is_rx_only_freq(int64_t freq);
+/* Transmitted on: HF, a transverter that is not RX-only */
+bool cfg_is_tx_freq(int64_t freq);
 /* The band the radio is on is one it can use (band_use over its edges); true between bands */
 bool cfg_band_usable(void);
 
@@ -61,12 +59,13 @@ void cfg_vfo_toggle(void);
 
 /* The mode a frequency opens in: its sideband (LSB under 10 MHz, USB above and on 60 m), WFM and AM on the X6200's FM
  * broadcast and airband, NFM where only the WR12 receives */
-int32_t cfg_default_mode(int32_t freq);
+int32_t cfg_default_mode(int64_t freq);
 
-/* The active bands, lowest first: start and stop in Hz and the name of each, up to max; returns how many */
-int cfg_bands_active(int32_t *start, int32_t *stop, char (*names)[16], int max);
+/* The active bands, lowest first: start and stop in Hz and the name of each, up to max; returns how many.
+ * Edges are int64: 10 GHz and 24 GHz do not fit in 32 bits. */
+int cfg_bands_active(int64_t *start, int64_t *stop, char (*names)[16], int max);
 /* The same with the bands' ids (ids may be NULL) */
-int cfg_bands_active_ids(int32_t *ids, int32_t *start, int32_t *stop, char (*names)[16], int max);
+int cfg_bands_active_ids(int32_t *ids, int64_t *start, int64_t *stop, char (*names)[16], int max);
 
 // Copy active VFO (freq, mode, agc, att, pre) to inactive VFO.
 void cfg_band_vfo_copy(void);

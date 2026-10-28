@@ -4,6 +4,7 @@
 -- so a change here only reaches a radio with a fresh /mnt/params.db.
 --
 -- Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+-- Copyright (c) 2026 Chris Fink KD0CQ
 --
 -- Frequencies in Hz. Modes by number, as the radio control library counts
 -- them: 0 LSB, 1 LSB-D, 2 USB, 3 USB-D, 4 CW, 5 CWR, 6 AM, 7 NFM.
@@ -44,7 +45,15 @@ INSERT INTO bands VALUES
     (300, '4m',      70000000,  72000000, 1),
     (301, '2m',     144000000, 150000000, 1),
     (302, '70cm',   432000000, 438000000, 1),
-    (13,  '60m',      5351500,   5366500, 1);
+    (13,  '60m',      5351500,   5366500, 1),
+    (303, '1.25m',   222000000,  225000000, 1),
+    (304, '33cm',    902000000,  928000000, 1),
+    (305, '23cm',   1240000000, 1300000000, 1),
+    (306, '13cm',   2300000000, 2450000000, 1),
+    (307, '9cm',    3300000000, 3500000000, 1),
+    (308, '6cm',    5650000000, 5925000000, 1),
+    (309, '3cm',   10000000000,10500000000, 1),
+    (310, '1.25cm',24000000000,24250000000, 1);
 
 -- Where each band opens the first time: VFO A frequency and mode.
 -- Broadcast bands and 4m have none. 60 m opens in USB, the sideband used there.
@@ -69,7 +78,15 @@ INSERT INTO band_params VALUES
     (204, 'vfoa_freq',  27415000), (204, 'vfoa_mode', 6),
     (301, 'vfoa_freq', 145500000), (301, 'vfoa_mode', 7),
     (302, 'vfoa_freq', 433500000), (302, 'vfoa_mode', 7),
-    (13,  'vfoa_freq',   5360000), (13,  'vfoa_mode', 2);
+    (13,  'vfoa_freq',   5360000), (13,  'vfoa_mode', 2),
+    (303, 'vfoa_freq',  222100000), (303, 'vfoa_mode', 2),
+    (304, 'vfoa_freq',  903100000), (304, 'vfoa_mode', 2),
+    (305, 'vfoa_freq', 1296100000), (305, 'vfoa_mode', 2),
+    (306, 'vfoa_freq', 2304100000), (306, 'vfoa_mode', 2),
+    (307, 'vfoa_freq', 3400100000), (307, 'vfoa_mode', 2),
+    (308, 'vfoa_freq', 5760100000), (308, 'vfoa_mode', 2),
+    (309, 'vfoa_freq', 10368100000), (309, 'vfoa_mode', 2),
+    (310, 'vfoa_freq', 24048100000), (310, 'vfoa_mode', 2);
 
 -- General settings by name; those not listed take the GUI's own defaults.
 CREATE TABLE params (name TEXT PRIMARY KEY ON CONFLICT REPLACE, val INTEGER);

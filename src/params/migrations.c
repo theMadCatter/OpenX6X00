@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2024 Georgy Dyuldin aka R2RFE
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE
@@ -320,6 +321,43 @@ static int _13_x6200_stock_transverters() {
     return 0;
 }
 
+/* Microwave bands for the band keys. A band is shown only where a transverter
+ * slice (or the WR12) covers it, the same way 2 m and 70 cm already work.
+ * USB: these are weak-signal transverter bands. INSERT OR IGNORE, so a band
+ * the operator already added under the same id is left alone. New rows only:
+ * existing rowids stay put. */
+static int _14_microwave_bands() {
+    if (sqlite3_exec(db,
+                     "INSERT OR IGNORE INTO bands(id, name, start_freq, stop_freq, type) VALUES "
+                     "(303, '1.25m', 222000000, 225000000, 1),"
+                     "(304, '33cm', 902000000, 928000000, 1),"
+                     "(305, '23cm', 1240000000, 1300000000, 1),"
+                     "(306, '13cm', 2300000000, 2450000000, 1),"
+                     "(307, '9cm', 3300000000, 3500000000, 1),"
+                     "(308, '6cm', 5650000000, 5925000000, 1),"
+                     "(309, '3cm', 10000000000, 10500000000, 1),"
+                     "(310, '1.25cm', 24000000000, 24250000000, 1);",
+                     NULL, NULL, NULL) != SQLITE_OK) {
+        printf("Cannot add microwave bands: %s\n", sqlite3_errmsg(db));
+        return 1;
+    }
+    if (sqlite3_exec(db,
+                     "INSERT OR IGNORE INTO band_params(bands_id, name, val) VALUES "
+                     "(303, 'vfoa_freq', 222100000), (303, 'vfoa_mode', 2),"
+                     "(304, 'vfoa_freq', 903100000), (304, 'vfoa_mode', 2),"
+                     "(305, 'vfoa_freq', 1296100000), (305, 'vfoa_mode', 2),"
+                     "(306, 'vfoa_freq', 2304100000), (306, 'vfoa_mode', 2),"
+                     "(307, 'vfoa_freq', 3400100000), (307, 'vfoa_mode', 2),"
+                     "(308, 'vfoa_freq', 5760100000), (308, 'vfoa_mode', 2),"
+                     "(309, 'vfoa_freq', 10368100000), (309, 'vfoa_mode', 2),"
+                     "(310, 'vfoa_freq', 24048100000), (310, 'vfoa_mode', 2);",
+                     NULL, NULL, NULL) != SQLITE_OK) {
+        printf("Cannot add microwave band frequencies: %s\n", sqlite3_errmsg(db));
+        return 1;
+    }
+    return 0;
+}
+
 static int (*migrations[])() = {
     _0_init_migrations,
     _1_create_ftx_table,
@@ -335,6 +373,7 @@ static int (*migrations[])() = {
     _11_x6200_transverters_off,
     _12_line_in_restore,
     _13_x6200_stock_transverters,
+    _14_microwave_bands,
 };
 
 int migrations_apply(void) {

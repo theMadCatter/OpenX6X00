@@ -136,8 +136,8 @@ ParamFloat       *cfg_cessb_power_up      = nullptr;
 // BAND
 ParamInt         *cfg_band_current_vfo    = nullptr;
 ParamInt         *cfg_band_if_shift       = nullptr;
-ParamInt         *cfg_band_vfoa_freq      = nullptr;
-ParamInt         *cfg_band_vfob_freq      = nullptr;
+ParamHz          *cfg_band_vfoa_freq      = nullptr;
+ParamHz          *cfg_band_vfob_freq      = nullptr;
 ParamFloat       *cfg_band_dac_offset     = nullptr;
 ParamInt         *cfg_band_grid_min       = nullptr;
 ParamInt         *cfg_band_grid_max       = nullptr;
@@ -159,21 +159,13 @@ ParamInt         *cfg_mode_squelch        = nullptr;
 ParamInt         *cfg_mode_zoom           = nullptr;
 ParamInt         *cfg_mode_freq_step      = nullptr;
 
-// TRANSVERTER (OTHER)
-ParamInt         *cfg_transverter_0_from  = nullptr;
-ParamInt         *cfg_transverter_0_to    = nullptr;
-ParamInt         *cfg_transverter_0_shift = nullptr;
-ParamInt         *cfg_transverter_1_from  = nullptr;
-ParamInt         *cfg_transverter_1_to    = nullptr;
-ParamInt         *cfg_transverter_1_shift = nullptr;
-
 // COMPUTED (current operating state)
-ComputedParamInt *cfg_fg_freq             = nullptr;
+ComputedParamHz  *cfg_fg_freq             = nullptr;
 ComputedParamInt *cfg_cur_mode            = nullptr;
 ComputedParamInt *cfg_cur_agc             = nullptr;
 ComputedParamInt *cfg_cur_att             = nullptr;
 ComputedParamInt *cfg_cur_pre             = nullptr;
-ComputedParamInt *cfg_bg_freq             = nullptr;
+ComputedParamHz  *cfg_bg_freq             = nullptr;
 ComputedParamInt *cfg_cur_filter_low      = nullptr;
 ComputedParamInt *cfg_cur_filter_high     = nullptr;
 ComputedParamInt *cfg_cur_filter_bw       = nullptr;
@@ -333,14 +325,6 @@ void cfg_api_init(void (*on_db_error)(const char *)) {
     // cfg_mode_squelch     = &cfg_sm.p_mode_squelch;
     cfg_mode_zoom        = &cfg_sm.p_mode_zoom;
     cfg_mode_freq_step   = &cfg_sm.p_mode_freq_step;
-
-    // TRANSVERTER (OTHER)
-    cfg_transverter_0_from  = &cfg_sm.p_transverter_0_from;
-    cfg_transverter_0_to    = &cfg_sm.p_transverter_0_to;
-    cfg_transverter_0_shift = &cfg_sm.p_transverter_0_shift;
-    cfg_transverter_1_from  = &cfg_sm.p_transverter_1_from;
-    cfg_transverter_1_to    = &cfg_sm.p_transverter_1_to;
-    cfg_transverter_1_shift = &cfg_sm.p_transverter_1_shift;
 
     // COMPUTED (current operating state)
     cfg_fg_freq          = &cfg_sm.cp_fg_freq;

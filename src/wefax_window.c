@@ -4,6 +4,8 @@
  *  Xiegu X6100 LVGL GUI - WeFax app: reception in Auto (APT start/stop) or
  *  Cont, live view with Align and Tilt, faxes saved as PNG in /mnt/wefax, a
  *  browser to straighten or delete them, TX of a picture.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "screen_main.h"
@@ -725,7 +727,7 @@ static void tx_poll(void)
 static void header_update(void)
 {
     char        l[64], r[48];
-    int32_t     f    = cparam_i_get(cfg_fg_freq) + WEFAX_CENTER_HZ;     /* USB */
+    int32_t     f    = cparam_hz_get(cfg_fg_freq) + WEFAX_CENTER_HZ;     /* USB */
     const char *name = "WeFax";
 
     for (int i = 0; i < STATIONS_N; i++)

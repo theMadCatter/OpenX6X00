@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  *
  *  The main screen: spectrum, waterfall and the bars around them, and what the front keys,
  *  the hand mic, the knobs and a USB keyboard do on it. The apps open over it.
@@ -256,7 +257,7 @@ static void swl_close_in(uint32_t ms) {
 
 static void swl_gene(void) {
     if (!swl.panel) {
-        swl.freq = cparam_i_get(cfg_fg_freq);
+        swl.freq = cparam_hz_get(cfg_fg_freq);
         swl.n = broadcast_db_find_matches(swl.freq, SWL_TOLERANCE_HZ, swl.found, BROADCAST_MAX_MATCHES);
         swl.cur = 0;
         swl_show_current();
@@ -284,7 +285,7 @@ static void swl_save_channel(void) {
 
     if (swl.panel) {
         if (swl.n > 0) name = swl.found[swl.cur].station;
-    } else if (broadcast_db_find_matches(cparam_i_get(cfg_fg_freq), SWL_TOLERANCE_HZ, first,
+    } else if (broadcast_db_find_matches(cparam_hz_get(cfg_fg_freq), SWL_TOLERANCE_HZ, first,
                                          BROADCAST_MAX_MATCHES) > 0) {
         name = first[0].station;
     }
@@ -972,19 +973,19 @@ static uint16_t freq_accel(uint16_t dt) {
  * fast goes straight past. Settings → Display → MAIN SCREEN. Not in CW: the
  * segment is thick with spots and a CW signal is tuned by ear, so the knob
  * kept sticking (ZAP and the app's tap centre a signal instead). */
-static int32_t snap_hz;
-static int     snap_hold;
+static int64_t snap_hz;
+static int      snap_hold;
 
 /* diff steps of the tuning step, dt ms per detent (0: a key, no acceleration) */
-static void plan_mode(int32_t old, int32_t freq);
+static void plan_mode(int64_t old, int64_t freq);
 
 static void freq_shift(int16_t diff, uint16_t dt) {
     if (subject_i_get(freq_lock)) {
         return;
     }
 
-    int32_t old  = cparam_i_get(cfg_fg_freq);
-    int32_t spot;
+    int64_t old  = cparam_hz_get(cfg_fg_freq);
+    int64_t spot;
     int     hold = cw_mode() ? 0 : param_i_get(cfg_spot_snap_hold);
     bool    slow = hold > 0 && (dt == 0 || dt * param_i_get(cfg_spot_snap_slow) >= 33);
 
@@ -995,22 +996,25 @@ static void freq_shift(int16_t diff, uint16_t dt) {
     snap_hold = 0;
 
     int32_t df   = diff * param_i_get(cfg_mode_freq_step) * freq_accel(dt);
-    int32_t freq = align_int(old + df, abs(df));
+    int64_t freq = align_i64(old + df, df < 0 ? -df : df);
 
     if (slow && spot_marks_crossed(old, freq, &spot)) {
         freq      = spot;
         snap_hz   = spot;
         snap_hold = hold;
     }
-    cparam_i_set(cfg_fg_freq, freq);
+    cparam_hz_set(cfg_fg_freq, freq);
     plan_mode(old, freq);
 }
 
 /* Settings > General > Mode from band plan: the knob turned into another segment of the band plan
  * sets its mode, CW in a CW segment, the band's sideband in a phone segment. SSB and CW only: the
  * digital modes, AM and FM, and a mode an app holds, stay as they are */
-static void plan_mode(int32_t old, int32_t freq) {
-    int from = band_plan_type(old), to = band_plan_type(freq);
+static void plan_mode(int64_t old, int64_t freq) {
+    /* The band-plan strip is 32-bit and has no microwave segments. A truncated
+     * 10 GHz dial must not be read as an HF segment. */
+    if (old > 2000000000LL || freq > 2000000000LL || old < 0 || freq < 0) return;
+    int from = band_plan_type((int32_t)old), to = band_plan_type((int32_t)freq);
 
     if (!param_i_get(cfg_mode_from_plan) || to < 0 || to == from || main_screen_mode_locked()) return;
 
@@ -1187,16 +1191,16 @@ bool main_screen_mode_locked() {
 
 /* A jump, not a turn of the knob: the spectrum starts again */
 void main_screen_set_freq(uint64_t freq) {
-    cparam_i_set(cfg_fg_freq, freq);
+    cparam_hz_set(cfg_fg_freq, (int64_t)freq);
     event_send(lv_scr_act(), EVENT_SCREEN_UPDATE, NULL);
 }
 
 /* The frequency on the screen: the TX one of a split while transmitting */
-static int32_t shown_freq(void) {
+static int64_t shown_freq(void) {
     if (param_i_get(cfg_band_split) && radio_get_state() == RADIO_TX) {
-        return cparam_i_get(cfg_bg_freq);
+        return cparam_hz_get(cfg_bg_freq);
     }
-    return cparam_i_get(cfg_fg_freq);
+    return cparam_hz_get(cfg_fg_freq);
 }
 
 /* Settings > Display > big frequency: the new frequency in the middle of the screen */
@@ -1227,7 +1231,7 @@ static void on_span_change(Subject *subj, void *user_data) {
 
     /* The waterfall is centred on the VFO minus the IF shift */
     /* Fixed waterfall mode: the centre stays put while the VFO moves */
-    int32_t center = shown_freq() - param_i_get(cfg_band_if_shift) - waterfall_view_shift();
+    int64_t center = shown_freq() - param_i_get(cfg_band_if_shift) - waterfall_view_shift();
 
     freq_scale_update(center, half, color);
     spot_marks_update(center, half);
@@ -1279,12 +1283,12 @@ static void on_band_id_change(Subject *subj, void *user_data) {
  * start an X6200 left on 2 m before its transverters were off by default, a radio left on 4 m. The band counts as
  * well as the frequency: on 4 m the start clamp puts the VFO on 55.000 MHz, which can be tuned */
 static void band_usable_check(void *arg) {
-    if (cfg_is_valid_hw_freq(cparam_i_get(cfg_fg_freq)) && cfg_band_usable()) {
+    if (cfg_is_valid_hw_freq(cparam_hz_get(cfg_fg_freq)) && cfg_band_usable()) {
         return;
     }
-    LV_LOG_USER("%i Hz cannot be tuned: another band", cparam_i_get(cfg_fg_freq));
+    LV_LOG_USER("%i Hz cannot be tuned: another band", cparam_hz_get(cfg_fg_freq));
     cfg_band_load_next(false);
-    if (!cfg_is_valid_hw_freq(cparam_i_get(cfg_fg_freq)) || !cfg_band_usable()) {
+    if (!cfg_is_valid_hw_freq(cparam_hz_get(cfg_fg_freq)) || !cfg_band_usable()) {
         cfg_band_load_next(true);
     }
 }

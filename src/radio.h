@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -49,15 +50,15 @@ radio_state_t radio_get_state();
  * Set freq for radio without updating corresponding subject: the active VFO, which receives
  * (Birdie Cal's scan). The apps' tones and the SWR scan go to radio_set_tx_freq
  */
-void radio_set_freq(int32_t freq);
-bool radio_check_freq(int32_t freq);
+void radio_set_freq(int64_t freq);
+bool radio_check_freq(int64_t freq);
 /* The frequency the radio transmits on: the other VFO's in split; with a TX shift the active one's + the shift
- * (- on VFO B), also where the other VFO cannot follow (below 100 kHz), so that it is refused */
-int32_t radio_tx_freq(void);
+ * (- on VFO B), also where the other VFO cannot follow (below 100 kHz), so that it is refused. True RF, Hz. */
+int64_t radio_tx_freq(void);
 /* The radio transmits on `freq`, without updating a subject: a digital app's tone, the SWR scan. The active VFO
  * moves; in split the base's split bit is off until 0, which puts both VFOs back on their own frequency, IF shift
- * and all, and split back on */
-void radio_set_tx_freq(int32_t freq);
+ * and all, and split back on. `freq` is true RF; the radio is sent the IF. */
+void radio_set_tx_freq(int64_t freq);
 
 radio_vfo_t radio_toggle_vfo();
 

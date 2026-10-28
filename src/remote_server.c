@@ -63,6 +63,7 @@
  *  is no login: the radio's own network is trusted.
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE     /* accept4, pipe2 */
@@ -787,7 +788,7 @@ static void panel_set(client_t *c, const char *name, const char *v1, const char 
 
 /* Any thread */
 static void pstate_read(pstate_t *s) {
-    s->freq  = cparam_i_get(cfg_fg_freq);
+    s->freq  = cparam_hz_get(cfg_fg_freq);
     s->mode  = cparam_i_get(cfg_cur_mode);
     s->flo   = cparam_i_get(cfg_cur_filter_low);
     s->fhi   = cparam_i_get(cfg_cur_filter_high);
@@ -903,7 +904,7 @@ static void panel_broadcast(const char *s) {
 
 /* The bands and the band plan: to one client, when it subscribes */
 static void panel_hello(client_t *c) {
-    static int32_t start[32], stop[32];
+    static int64_t start[32], stop[32];
     static char    names[32][16];
     static char    buf[4096];       /* the plan with bands of the band list added: more than 2 KB */
     size_t         k = 0;
@@ -915,7 +916,7 @@ static void panel_hello(client_t *c) {
     for (int i = 0; i < n && k < sizeof(buf) - 64; i++) {
         k += snprintf(buf + k, sizeof(buf) - k, "%s{\"n\":", i ? "," : "");
         k += json_str(buf + k, sizeof(buf) - k, names[i]);
-        k += snprintf(buf + k, sizeof(buf) - k, ",\"a\":%d,\"b\":%d}", start[i], stop[i]);
+        k += snprintf(buf + k, sizeof(buf) - k, ",\"a\":%lld,\"b\":%lld}", (long long)start[i], (long long)stop[i]);
     }
     snprintf(buf + k, sizeof(buf) - k, "]");
     client_text(c, buf);
@@ -1346,7 +1347,7 @@ static void *panel_thread(void *arg) {
         if (dsp_spectrum_snapshot(db, WATERFALL_NFFT, &center, &width, &seq) && seq != sp_seq) {
             sp_seq = seq;
             if (center == 0)    /* an old base sends no frequency with its data: the one set, as the waterfall does */
-                center = cparam_i_get(cfg_fg_freq) - param_i_get(cfg_band_if_shift) + cparam_i_get(cfg_mode_lo_offset);
+                center = cparam_hz_get(cfg_fg_freq) - param_i_get(cfg_band_if_shift) + cparam_i_get(cfg_mode_lo_offset);
             for (int i = 0; i < WATERFALL_NFFT; i++) {
                 float v = db[i];
                 bins[i] = (int8_t)(v < -128.0f ? -128 : v > 127.0f ? 127 : lroundf(v));

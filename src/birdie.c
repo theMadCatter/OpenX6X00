@@ -9,6 +9,7 @@
  *  receiver's own centre spike moves with the VFO and is left out.
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "birdie.h"
@@ -144,7 +145,7 @@ static void notch_release(void) {
 /* The birdie in the passband, as an audio frequency: USB above the VFO, LSB below it. CW, AM
  * and FM are left alone: their passband sits elsewhere. 0 when none. */
 static int32_t notch_wanted(void) {
-    int32_t vfo  = cparam_i_get(cfg_fg_freq);
+    int32_t vfo  = cparam_hz_get(cfg_fg_freq);
     int32_t mode = cparam_i_get(cfg_cur_mode);
     int32_t low  = cparam_i_get(cfg_cur_filter_low), high = cparam_i_get(cfg_cur_filter_high);
     bool    usb  = mode == radio_mode_usb || mode == radio_mode_usb_dig;
@@ -272,10 +273,10 @@ static bool spectrum_at(int32_t f, float *db, uint32_t *span) {
 
 static void *scan_thread(void *arg) {
     (void)arg;
-    int32_t  start[64], stop[64];
+    int64_t  start[64], stop[64];
     char     names[64][16];
     int      bands = cfg_bands_active(start, stop, names, 64);
-    int32_t  dial  = cparam_i_get(cfg_fg_freq);
+    int64_t  dial  = cparam_hz_get(cfg_fg_freq);
     uint32_t span  = 0;
     float    a[WATERFALL_NFFT], b[WATERFALL_NFFT];
     uint16_t pa[64], pb[64];
@@ -288,6 +289,11 @@ static void *scan_thread(void *arg) {
             continue;   /* receive only (the X6200's FM broadcast and airband, the WR12): no transmit there to clean
                          * up for, minutes more */
         }
+        /* The scan steps in int32. A band above 2 GHz, or wider than 80 MHz,
+         * would wrap or run for tens of minutes. 2 m through 23 cm still fit. */
+        if (stop[bi] > 2000000000LL || stop[bi] - start[bi] > 80000000LL) {
+            continue;
+        }
 
         /* a first spectrum for the width in use */
         radio_set_freq(start[bi] + 50000 < stop[bi] ? start[bi] + 50000 : (start[bi] + stop[bi]) / 2);
@@ -296,7 +302,7 @@ static void *scan_thread(void *arg) {
             continue;
         int32_t step = (int32_t)span * 3 / 4;
 
-        for (int32_t f = start[bi] + (int32_t)span / 2; f - (int32_t)span / 2 < stop[bi] && !atomic_load(&stop_req);
+        for (int32_t f = (int32_t)start[bi] + (int32_t)span / 2; f - (int32_t)span / 2 < stop[bi] && !atomic_load(&stop_req);
              f += step) {
             progress(false, "Scanning %s at %.3f MHz, %d found so far", names[bi], f / 1e6, found);
             radio_set_freq(f);

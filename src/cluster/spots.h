@@ -3,6 +3,8 @@
  *
  *  DX cluster spots: line parser, spot store, band and mode helpers.
  *  No LVGL and no network here, so it can be unit tested on a PC.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -61,9 +63,15 @@ uint16_t cluster_age_min(uint16_t spot_utc_min, uint16_t now_utc_min);
 int         cluster_band_of(int32_t hz);
 const char *cluster_band_name(int band);
 
-/* Mode to tune a spot with: from its comment (CW, FT8, SSB, ...), else
- * from the band plan (IARU Region 1). */
+/* Mode to tune a spot with: from its comment (CW, FT8, SSB, ...), else from the
+ * band plan the radio is using. Until cluster_set_band_plan is called, the guess
+ * is the IARU Region 1 CW edges compiled into spots.c, so a test of this file
+ * does not need the strip. */
 cluster_mode_t cluster_guess_mode(const cluster_spot_t *spot);
+
+/* Segment type at freq (bp_type_t from band_plan_data.h), or -1 between segments.
+ * NULL restores the Region 1 fallback. The strip installs band_plan_type. */
+void cluster_set_band_plan(int (*fn)(int32_t freq));
 
 #ifdef __cplusplus
 }

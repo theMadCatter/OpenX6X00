@@ -1,14 +1,20 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "band_plan.h"
 
 #include "cfg/cfg_api.h"
+#include "cluster/spots.h"
+#include "params/params.h"
+#include "remote_server.h"
 #include "styles.h"
 #include "theme.h"
 
 #include <pthread.h>
+#include <stdio.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,38 +26,12 @@
 
 #define WIDTH   800
 #define POOL    16      /* segments in view: a span is 100 kHz at most */
-#define MAX_SEG 96      /* the IARU table and the bands added to the band list */
+#define MAX_SEG 160     /* a plan of about fifty segments, and the bands added to the band list */
 #define BANDS   48
 #define OPA     LV_OPA_80     /* the waterfall shows through a little, the labels stay readable */
 
 extern lv_font_t sony_18;
 
-
-typedef struct {
-    int32_t   start, end;   /* Hz */
-    bp_type_t type;
-} bp_seg_t;
-
-/* IARU Region 1, adjacent ranges of the same type merged */
-static const bp_seg_t plan[] = {
-    {  1810000,  1838000, BP_CW  }, {  1838000,  1843000, BP_DIG }, {  1843000,  2000000, BP_ALL },
-    {  3500000,  3570000, BP_CW  }, {  3570000,  3600000, BP_DIG }, {  3600000,  3800000, BP_ALL },
-    {  5351500,  5354000, BP_CW  }, {  5354000,  5366000, BP_ALL }, {  5366000,  5366500, BP_DIG },  /* WRC-15 */
-    {  7000000,  7040000, BP_CW  }, {  7040000,  7050000, BP_DIG }, {  7050000,  7200000, BP_ALL },
-    { 10100000, 10130000, BP_CW  }, { 10130000, 10150000, BP_DIG },
-    { 14000000, 14070000, BP_CW  }, { 14070000, 14099000, BP_DIG }, { 14099000, 14101000, BP_BCN },
-    { 14101000, 14112000, BP_DIG }, { 14112000, 14350000, BP_ALL },
-    { 18068000, 18095000, BP_CW  }, { 18095000, 18109000, BP_DIG }, { 18109000, 18111000, BP_BCN },
-    { 18111000, 18120000, BP_DIG }, { 18120000, 18168000, BP_ALL },
-    { 21000000, 21070000, BP_CW  }, { 21070000, 21120000, BP_DIG }, { 21120000, 21149000, BP_CW  },
-    { 21149000, 21151000, BP_BCN }, { 21151000, 21450000, BP_ALL },
-    { 24890000, 24915000, BP_CW  }, { 24915000, 24929000, BP_DIG }, { 24929000, 24931000, BP_BCN },
-    { 24931000, 24990000, BP_ALL },
-    { 28000000, 28070000, BP_CW  }, { 28070000, 28190000, BP_DIG }, { 28190000, 28225000, BP_BCN },
-    { 28225000, 29700000, BP_ALL },
-    { 50000000, 50100000, BP_CW  }, { 50100000, 50300000, BP_ALL }, { 50300000, 50400000, BP_DIG },
-    { 50400000, 50500000, BP_BCN }, { 50500000, 52000000, BP_ALL },
-};
 
 static const theme_color_t colors[] = { TC_bp_cw, TC_bp_dig, TC_bp_ssb, TC_bp_bcn };
 /* Longest first: the first label that fits the segment is used */
@@ -68,8 +48,28 @@ static seg_t   segs[POOL];
 static bool    ready;
 static int32_t span_center, span_half;
 
-/* The plan in use: plan[] and, where it has nothing, the active bands of the band list (a band added on the web
- * page, "60m CW" at 5.3 MHz, had no strip and no CW keyboard: issue #5). Read from any thread (remote_server) */
+/* The plan in use: the table band_plan_table() returned and, where it has nothing, the active bands of the
+ * band list (a band added on the web page, "60m CW" at 5.3 MHz, had no strip and no CW keyboard: issue #5).
+ * Read from any thread (remote_server, the cluster's mode guess). */
+
+/* Auto reads the station callsign. An explicit plan does not, so Region 1 stays the old strip. Before
+ * cfg_api_init the pointer is NULL and the callsign is empty: that is Region 1, as a radio with no
+ * callsign always was. */
+static int selected_plan(void) {
+    char call[32];
+    int  sel = BP_PLAN_AUTO;
+
+    if (cfg_band_plan_sel) {
+        sel = param_i_get(cfg_band_plan_sel);
+    }
+    call[0] = '\0';
+    if (sel == BP_PLAN_AUTO) {
+        params_lock();
+        snprintf(call, sizeof(call), "%s", params.callsign.x);
+        params_unlock(NULL);
+    }
+    return band_plan_resolve(sel, call);
+}
 static bp_seg_t        cur[MAX_SEG];
 static int             ncur;
 static pthread_mutex_t cur_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -93,10 +93,20 @@ void band_plan_reload(void) {
     static int32_t ids[BANDS], start[BANDS], stop[BANDS];
     static char    names[BANDS][16];
     static bp_seg_t list[MAX_SEG];
-    int            nb = cfg_bands_active_ids(ids, start, stop, names, BANDS);
-    int            n  = sizeof(plan) / sizeof(plan[0]);
+    const bp_seg_t *table = NULL;
+    int             nb    = cfg_bands_active_ids(ids, start, stop, names, BANDS);
+    int             n     = band_plan_table(selected_plan(), &table);
 
-    memcpy(list, plan, sizeof(plan));
+    /* A plan this build does not know returns nothing. Region 1 is the fallback inside
+     * band_plan_resolve, so this is only a guard against copying past the array. */
+    if (n > MAX_SEG) {
+        n = MAX_SEG;
+    }
+    if (n > 0 && table) {
+        memcpy(list, table, (size_t)n * sizeof(list[0]));
+    } else {
+        n = 0;
+    }
     for (int i = 0; i < nb; i++) {
         /* Broadcast, the X6200's FM broadcast and airband, CB (ids 100-299 in sql/params.sql and migrations.c) are no
          * amateur bands; by their names too, so a user's band that got such an id keeps its strip */
@@ -124,6 +134,9 @@ void band_plan_reload(void) {
     memcpy(cur, list, n * sizeof(list[0]));
     ncur = n;
     pthread_mutex_unlock(&cur_lock);
+    /* After the lock: the panel copies the segments, and it must not run while cur_lock is held.
+     * No panel client yet (and before remote_server_init) is a no-op. */
+    remote_server_band_plan();
 }
 
 static void redraw(void) {
@@ -181,8 +194,19 @@ static void redraw(void) {
     }
 }
 
+void band_plan_callsign_changed(void) {
+    if (cfg_band_plan_sel && param_i_get(cfg_band_plan_sel) == BP_PLAN_AUTO) {
+        band_plan_reload();
+        band_plan_refresh();
+    }
+}
+
 void band_plan_init(lv_obj_t *parent, lv_coord_t y) {
     band_plan_reload();
+    /* The cluster guesses a mode without including this file (it has no LVGL). The hook reads the
+     * plan just loaded. A theme rebuild calls init again; pointing the hook here once more is the
+     * same function. Before this, and in a unit test, the cluster keeps its Region 1 CW edges. */
+    cluster_set_band_plan(band_plan_type);
     for (int i = 0; i < POOL; i++) {
         lv_obj_t *b = lv_obj_create(parent);
 

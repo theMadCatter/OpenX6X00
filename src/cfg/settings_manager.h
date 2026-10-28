@@ -1,3 +1,5 @@
+// Copyright (c) 2026 Chris Fink KD0CQ
+
 #pragma once
 
 // SettingsManager: orchestrator that owns the global/band/mode parameters and
@@ -195,6 +197,15 @@ class SettingsManager {
     Parameter<int32_t> p_smeter_lamp{"smeter_lamp", true, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};
     Parameter<int32_t> p_band_plan{"band_plan", true, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
+    // Which plan the strip, "mode from band plan" and the cluster's mode guess use.
+    // 0 Auto: the station callsign. K, N, W and AA-AL take the USA plan, another known
+    // prefix its ITU region, and an empty or unrecognised callsign Region 1 (what the
+    // radio showed before there was a choice). 1 Region 1, 2 Region 2, 3 Region 3, 4 USA.
+    // A callsign already saved from outside Region 1 changes plan on upgrade; Region 1
+    // here keeps the old strip whatever the callsign says. A value this build does not
+    // know is treated as Region 1.
+    Parameter<int32_t> p_band_plan_sel{"band_plan_sel", 0, 0, 4,
         StorageType::GLOBAL, pending_writes_, &global_params_};
     // The broadcast on air (EiBi) in the frequency strip, in place of the band
     Parameter<int32_t> p_broadcast_name{"broadcast_name", true, 0, 1,

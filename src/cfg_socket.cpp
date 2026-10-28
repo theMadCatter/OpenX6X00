@@ -13,6 +13,7 @@
  *  Settings pages apply them.
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "cfg_socket.h"
@@ -57,6 +58,7 @@ static const struct {
     {"auto_level", &cfg_sm.p_auto_level_enabled, 0, 1},
     {"wf_speed", &cfg_sm.p_waterfall_speed, 1, 5},
     {"band_plan", &cfg_sm.p_band_plan, 0, 1},
+    {"band_plan_sel", &cfg_sm.p_band_plan_sel, 0, 4},   /* Auto, Region 1, Region 2, Region 3, USA */
     {"cluster_spots_wf", &cfg_sm.p_cluster_spots_wf, 0, 1},
     {"cluster_column", &cfg_sm.p_cluster_column, 0, 1},
     {"cluster_order", &cfg_sm.p_cluster_order, 0, 1},

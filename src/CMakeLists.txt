@@ -1,4 +1,5 @@
 # The GUI program, x6100_gui. Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+# Copyright (c) 2026 Chris Fink KD0CQ
 # The source order below is the link order: keep it when adding files.
 add_executable(${PROJECT_NAME})
 
@@ -39,6 +40,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     freq_strip.c
     freq_scale.c
     spot_marks.c
+    band_plan_data.c
     band_plan.c
     cw_field.c
     paddle_keyer.c

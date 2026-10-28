@@ -6,6 +6,7 @@
  *  is its client; audio goes over the TCI server (tci_server.c).
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -50,6 +51,10 @@ void remote_flush(const lv_area_t *area, const lv_color_t *color_p);
  * decoder's text (any thread) */
 void remote_server_ft8_row(const void *cell);
 void remote_server_cw_text(const char *text);
+
+/* The band plan again ("plan [...]"), after a plan or callsign change. Subscribe still sends
+ * it once in the hello. No panel client is a no-op, including before remote_server_init. */
+void remote_server_band_plan(void);
 
 #ifdef __cplusplus
 }

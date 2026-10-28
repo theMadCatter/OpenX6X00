@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "image_level.h"
@@ -3730,6 +3731,11 @@ static void make_display_page() {
     /* Overlays: shown with or without the spectrum */
     row = card_begin("MAIN SCREEN");
     row = make_param_switch(row, "Band plan", cfg_sm.p_band_plan);
+    /* Auto uses the station callsign. Region 1 is the strip the radio had before this choice,
+     * and it stays that strip whatever the callsign says. */
+    row = make_param_choice(row, "Band plan region",
+                            " Auto \n Region 1 \n Region 2 \n Region 3 \n USA ",
+                            cfg_sm.p_band_plan_sel);
     row = make_param_switch(row, "Cluster spots", cfg_sm.p_cluster_spots_wf);
     row = make_param_switch(row, "Cluster column", cfg_sm.p_cluster_column);
     row = make_param_switch(row, "Broadcast names", cfg_sm.p_broadcast_name);

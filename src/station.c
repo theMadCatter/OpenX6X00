@@ -4,10 +4,12 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "station.h"
 
+#include "band_plan.h"
 #include "textarea_window.h"
 #include "params/params.h"
 #include "qth/qth.h"
@@ -81,6 +83,8 @@ bool station_callsign_save(const char *callsign) {
         }
     }
     params_str_set(&params.callsign, callsign);
+    /* Auto only. An explicit Region 1 (or any other plan) does not follow the callsign. */
+    band_plan_callsign_changed();
     return true;
 }
 

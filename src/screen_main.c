@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  *
  *  The main screen: spectrum, waterfall and the bars around them, and what the front keys,
  *  the hand mic, the knobs and a USB keyboard do on it. The apps open over it.
@@ -1302,6 +1303,14 @@ static void on_band_plan_change(Subject *subj, void *user_data) {
     on_cluster_spots_wf_change(NULL, NULL);
 }
 
+/* Which plan, not whether the strip is drawn. The loaded segments are what "mode from band plan",
+ * the CW keyboard and the cluster's guess read, so a hidden strip still follows this. */
+static void on_band_plan_sel_change(Subject *subj, void *user_data) {
+    band_plan_reload();
+    band_plan_refresh();
+    on_cluster_spots_wf_change(NULL, NULL);
+}
+
 static void on_cluster_column_change(Subject *subj, void *user_data) {
     if (!param_i_get(cfg_cluster_column)) {
         mfk_cluster_gone();
@@ -1413,6 +1422,9 @@ static void build(void) {
     cluster_column_init(obj, wf_y);
     subject_subscribe_delayed_and_notify((Subject*)cfg_cluster_spots_wf, on_cluster_spots_wf_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_band_plan, on_band_plan_change, NULL);
+    /* Not and_notify: band_plan_init has already loaded the plan. A theme rebuild subscribes again
+     * under subject_no_duplicates, so this does not stack. */
+    subject_subscribe_delayed((Subject*)cfg_band_plan_sel, on_band_plan_sel_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_band_id, on_band_id_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_wr12, on_wr12_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_cluster_column, on_cluster_column_change, NULL);

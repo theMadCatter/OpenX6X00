@@ -376,16 +376,47 @@ upgrade; choose Region 1 to keep the old one whatever the callsign says.
 Region 1 is the plan the radio shipped with: 160 m to 6 m, 60 m as WRC-15,
 6 m stopping at 52 MHz. Region 2 runs 80 m to 4 MHz, 40 m to 7.3 MHz and 6 m
 to 54 MHz. Region 3 stops 80 m at 3.9 MHz and 40 m at 7.2 MHz (7.2-7.3 is not
-an amateur allocation in that plan). The USA plan is FCC Part 97 for an
-Amateur Extra operator in the continental United States. It does not draw the
-narrower General, Advanced, Technician or Novice segments. Continental phone
-on 40 m starts at 7.125 MHz (phone from 7.075 is only the exception in
-97.307(f)(11), not the continental segment). 160 m phone in that plan is the
-on-air split, because the FCC authorizes phone on the whole band. 60 m
-follows the channel and segment list read from the eCFR on 28 October 2026;
-that allocation changed during 2026, so confirm the current rule before
-relying on a channel. Hiding the strip does not change the plan: Mode from
-band plan and the CW line still use it.
+an amateur allocation in that plan).
+
+The USA plan is FCC Part 97 for the continental United States: 97.301 for the
+frequencies a class may use, 97.305 for the emissions. US license class, on
+this card and on the web configurator's Display page, is Extra, Advanced,
+General, Technician or Novice. Extra is the default, so the strip stays as it
+was until a class is chosen. The row is there only while the USA plan is in
+use (the setting is USA, or Auto and the station callsign is a US call).
+Chris Fink KD0CQ, who added these plans, holds Advanced. The stored default
+is still Extra.
+
+Tuning and receiving stay unrestricted on every frequency, for every class.
+Transmitting stays available too. The class changes the strip and the warning
+colour, and the operator is responsible for the transmission, including MARS,
+CAP and emergency traffic. Broadcast, the airband and the WR12 receiver stay
+receive-only in the hardware, the same as before this setting existed.
+
+Where the class has no privilege the strip is blank. The transmit frequency
+turns the warning colour when it is an amateur frequency outside that class:
+the VFO label, the frequency digits (in split, the transmit frequency, while
+the frequency being received stays in the ordinary colour) and the frequency
+on the TX meter. WWV, a shortwave broadcast, or any frequency these tables do
+not know as amateur stays in the ordinary colour.
+
+Advanced phone on 40 m starts at 7.125 MHz, the same edge as Extra.
+14.150-14.175 and 21.200-21.225 are blank. General phone starts at 7.175 on
+40 m, 14.225 on 20 m and 21.275 on 15 m, and 7.125-7.175 is blank. Technician
+and Novice share the HF CW subbands 3.525-3.600, 7.025-7.125 and
+21.025-21.200, and 10 m phone from 28.300 to 28.500. Novice has no 6 m.
+Above 6 m the strip still comes from the band list. The warning follows
+97.301, so 2 m warns for Novice and stays ordinary for Technician.
+
+Continental Extra phone on 40 m starts at 7.125 MHz (phone from 7.075 is the
+exception in 97.307(f)(11), for FCC stations in Regions 1 and 3 and in Region
+2 west of 130 degrees west or south of 20 degrees north). 160 m phone in the
+Extra, Advanced and General plans is the on-air split, because the FCC
+authorizes phone on the whole band. 60 m follows the channel and segment list
+read from the eCFR on 28 October 2026; that allocation changed during 2026,
+so confirm the current rule before relying on a channel. Hiding the strip
+leaves the plan in use: Mode from band plan and the CW line still follow it.
+Outside a class's segments the mode stays where the operator left it.
 
 A band of the band list the selected plan does not cover (one added on the
 web configurator's Bands page, the top of 6 m, 4 m, 2 m) gets a strip too,
@@ -589,7 +620,7 @@ Per band S-meter cal: see [S-meter](#s-meter). TCI SERVER: see
 | BACKLIGHT | timeout and brightness, buttons brightness (Always Off, Always On, Temporarily On), Screen off (min) (minutes without a key or knob, 0 never; the key that wakes it does nothing else), Screen always off (the screen stays dark for a radio run from the VFO-Knob or a browser; POWER shows it for the blank time, a minute at least) |
 | SPECTRUM | Spectrum; with it on Fill, Peaks, Fill gradient, Filter colour, Height (see [Waterfall](#waterfall)) |
 | WATERFALL | see [Waterfall](#waterfall) |
-| MAIN SCREEN | Band plan, Band plan region (Auto, Region 1, Region 2, Region 3, USA; see [Waterfall](#waterfall)), Cluster spots, Cluster column, Broadcast names, S-meter type, S-meter colours, Needle lamp, Birdies (see [Birdie Cal](#birdie-cal)), Zoom and step per mode (see [Waterfall](#waterfall)) |
+| MAIN SCREEN | Band plan, Band plan region (Auto, Region 1, Region 2, Region 3, USA; see [Waterfall](#waterfall)), US license class (Extra, Advanced, General, Technician, Novice; only while the USA plan is in use), Cluster spots, Cluster column, Broadcast names, S-meter type, S-meter colours, Needle lamp, Birdies (see [Birdie Cal](#birdie-cal)), Zoom and step per mode (see [Waterfall](#waterfall)) |
 | INTERFACE | Popups Freq/Info/ALC, Icon menus, Knob info, Theme, Font, Decoder text, FT8/FT4 info |
 
 - Popups Freq/Info/ALC: a big frequency while tuning, a big value of the
@@ -2356,7 +2387,7 @@ applied on the radio as you change them.
 | Theme | Theme (the radio's screen restarts with the new one) |
 | S-meter | S-meter type (Bars, Needle), Colours (Theme, Scale, Level), Needle lamp; with a preview |
 | Waterfall | Mode (Centered, Fixed), Speed (1-5), Auto level, Auto level offset (-15 to +15 dB), Center line, Zoom, Smooth scroll |
-| On the waterfall | Band plan, Band plan region (Auto, Region 1, Region 2, Region 3, USA; see [Waterfall](#waterfall)), Cluster spots, Cluster column |
+| On the waterfall | Band plan, Band plan region (Auto, Region 1, Region 2, Region 3, USA; see [Waterfall](#waterfall)), US license class (Extra, Advanced, General, Technician, Novice; only while the USA plan is in use), Cluster spots, Cluster column |
 | Backlight | Brightness, Brightness when idle, Idle after (5-120 s), Button lights (Always off, Always on, Temporarily on), Screen off after (0-120 min), Screen always off |
 | Receiver | the X6200 only: WR12 on HOST (see [WR12 receiver](#wr12-receiver-x6200)) |
 | Text and info | Independent VFOs, Birdies (Off, Marks, Marks + notch), Mode from band plan, Zoom and step per mode (see [Waterfall](#waterfall)), Icon menus, Knob info, Decoder text (Large, Compact), Magnify frequency, Magnify info, Magnify ALC |

@@ -1,6 +1,8 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
  *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
+ *
  *  Frequency strip: band on the left, VFO frequency in the middle, then the
  *  locator and the mode on the right; over the locator the TX audio offset of
  *  FT8/FT4/WSPR (the big digits stay on the dial, as WSJT-X). Always shown; the app dialogs start
@@ -33,8 +35,10 @@ int freq_strip_step_char(const char *text, int32_t step, bool *big) {
 
 #include "freq_strip.h"
 
+#include "band_plan.h"
 #include "broadcast_db.h"
 #include "cfg/cfg_api.h"
+#include "radio.h"
 #include "cluster/spots.h"
 #include "info.h"
 #include "main_screen.h"
@@ -227,17 +231,20 @@ static void update_cb(Subject *subj, void *user_data) {
     if (theme_shape.deck) {     /* the other VFO at the top right, the current one in the badge */
         bool        b = param_i_get(cfg_band_current_vfo) == RADIO_VFO_B;
         uint16_t    mhz2, khz2, hz2;
-        /* a TX shift after it ("-600k", "REV"); in split, in the error colour where the radio cannot transmit */
+        /* a TX shift after it ("-600k", "REV"). Error: the hardware cannot transmit there.
+         * Warning: the USA class has no privilege on the transmit frequency. The big digits stay
+         * the receive frequency in split, so the warning goes on the other VFO. */
         const char *shift = info_params_tx_shift_label();
         bool        blocked = info_tx_blocked();
+        bool        warn = !blocked && param_i_get(cfg_band_split) && band_plan_tx_warning(radio_tx_freq());
         char        tail[32] = "";
 
-        if (shift) snprintf(tail, sizeof(tail), "  #%06x %s#", theme_hex(blocked ? TC_err : TC_info), shift);
+        if (shift) snprintf(tail, sizeof(tail), "  #%06x %s#", theme_hex(blocked ? TC_err : (warn ? TC_warn : TC_info)), shift);
         split_freq(cparam_i_get(cfg_bg_freq), &mhz2, &khz2, &hz2);
         lv_label_set_text_fmt(freq_label, "%i.%03i", mhz, khz);
         lv_label_set_text_fmt(freq_small, ".%02i", hz / 10);
         lv_label_set_text_fmt(other_label, "#%06x %s#  #%06x %i.%03i.%02i#%s", theme_hex(TC_text), b ? "A" : "B",
-                              theme_hex(blocked ? TC_err : TC_text_dim), mhz2, khz2, hz2 / 10, tail);
+                              theme_hex(blocked ? TC_err : (warn ? TC_warn : TC_text_dim)), mhz2, khz2, hz2 / 10, tail);
         lv_label_set_text(vfo_badge, b ? "B" : "A");
         lv_label_set_text_fmt(band_label, "#%06x %s#", theme_hex(TC_accent), app);   /* the open app only */
     } else if (param_i_get(cfg_band_split)) {
@@ -250,6 +257,17 @@ static void update_cb(Subject *subj, void *user_data) {
 
         if (theme_shape.mono) lv_obj_set_style_text_font(freq_label, &pixel_freq_40, 0);
         lv_label_set_text_fmt(freq_label, "%i.%03i.%03i", mhz, khz, hz);
+    }
+    /* In split the big digits are the receiver. The warning colours the transmit frequency,
+     * which is this label when the radio is not in deck-and-split. Receiving is unrestricted. */
+    {
+        bool deck_split = theme_shape.deck && param_i_get(cfg_band_split);
+        bool warn = !deck_split && !info_tx_blocked() && band_plan_tx_warning(radio_tx_freq());
+
+        lv_obj_set_style_text_color(freq_label, warn ? TC(warn) : TC(text), 0);
+        if (freq_small) {
+            lv_obj_set_style_text_color(freq_small, warn ? TC(warn) : TC(text), 0);
+        }
     }
     /* An open app: the band (a broadcast has nothing to do with the digital apps) */
     const char *band = note[0] && f == note_freq ? note : bc[0] && !app[0] ? bc : cluster_band_name(cluster_band_of(f));
@@ -320,6 +338,7 @@ static lv_obj_t *make_label(lv_obj_t *parent, lv_align_t align, lv_coord_t x, co
 lv_obj_t *freq_strip_init(lv_obj_t *parent) {
     bool again = strip != NULL;   /* a theme change: the timer stays */
 
+    freq_small = NULL;   /* set again only in the deck layout; a theme change must not colour a dead label */
     strip = lv_obj_create(parent);
     lv_obj_remove_style_all(strip);
     lv_obj_add_style(strip, &freq_strip_style, 0);
@@ -437,6 +456,8 @@ lv_obj_t *freq_strip_init(lv_obj_t *parent) {
 
     subject_subscribe_delayed((Subject *)cfg_fg_freq, update_cb, NULL);
     subject_subscribe_delayed((Subject *)cfg_bg_freq, update_cb, NULL);
+    subject_subscribe_delayed((Subject *)cfg_band_plan_sel, update_cb, NULL);
+    subject_subscribe_delayed((Subject *)cfg_band_plan_class, update_cb, NULL);
     subject_subscribe_delayed((Subject *)cfg_band_split, update_cb, NULL);
     subject_subscribe_delayed((Subject *)cfg_band_tx_shift, update_cb, NULL);   /* deck: after the other VFO */
     subject_subscribe_delayed((Subject *)cfg_cur_mode, update_cb, NULL);

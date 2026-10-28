@@ -46,6 +46,7 @@ extern "C" {
     #include "main.h"
     #include "msg_box.h"
     #include "text_popup.h"
+    #include "band_plan_data.h"
     #include "station.h"
     #include "tci_server.h"
     #include "remote_server.h"
@@ -3696,6 +3697,38 @@ static void make_txcal_page() {
     card_end(row);
 }
 
+/* The license class is a USA-plan control. Auto counts when the callsign is a US one.
+ * Rebuilding the page from inside the dropdown's event deletes the dropdown, so the
+ * rebuild is deferred, the same way a theme change is. */
+static bool usa_plan_open(void) {
+    char call[32];
+    int  sel = cfg_sm.p_band_plan_sel.get();
+
+    if (sel == BP_PLAN_USA) return true;
+    if (sel != BP_PLAN_AUTO) return false;
+    call[0] = '\0';
+    params_lock();
+    snprintf(call, sizeof(call), "%s", params.callsign.x);
+    params_unlock(NULL);
+    return band_plan_from_call(call) == BP_PLAN_USA;
+}
+
+static void make_display_page(void);
+
+static void display_page_again(void *arg) {
+    (void)arg;
+    make_display_page();
+}
+
+static void band_plan_region_cb(lv_event_t *e) {
+    bool was = usa_plan_open();
+
+    int_choice_cb(e);
+    if (was != usa_plan_open()) {
+        lv_async_call(display_page_again, NULL);
+    }
+}
+
 static void make_display_page() {
     uint8_t row;
 
@@ -3732,10 +3765,19 @@ static void make_display_page() {
     row = card_begin("MAIN SCREEN");
     row = make_param_switch(row, "Band plan", cfg_sm.p_band_plan);
     /* Auto uses the station callsign. Region 1 is the strip the radio had before this choice,
-     * and it stays that strip whatever the callsign says. */
-    row = make_param_choice(row, "Band plan region",
-                            " Auto \n Region 1 \n Region 2 \n Region 3 \n USA ",
-                            cfg_sm.p_band_plan_sel);
+     * and it stays that strip whatever the callsign says. Changing into or out of the USA
+     * plan rebuilds this page so the license class row comes or goes. */
+    wl_row_label(row, "Band plan region");
+    row_choice(row, 1, 3, SMALL_3, " Auto \n Region 1 \n Region 2 \n Region 3 \n USA ",
+               cfg_sm.p_band_plan_sel.get(), band_plan_region_cb, &cfg_sm.p_band_plan_sel);
+    row++;
+    /* Extra is the default. The class colours the strip and the TX frequency. It does not
+     * stop receiving or transmitting. Hidden unless the USA plan is the one in use. */
+    if (usa_plan_open()) {
+        row = make_param_choice(row, "US license class",
+                                " Extra \n Advanced \n General \n Technician \n Novice ",
+                                cfg_sm.p_band_plan_class);
+    }
     row = make_param_switch(row, "Cluster spots", cfg_sm.p_cluster_spots_wf);
     row = make_param_switch(row, "Cluster column", cfg_sm.p_cluster_column);
     row = make_param_switch(row, "Broadcast names", cfg_sm.p_broadcast_name);

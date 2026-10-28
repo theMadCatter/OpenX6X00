@@ -34,6 +34,7 @@
 
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ---------------------------------------------------------------- Region 1 */
@@ -115,12 +116,18 @@ static const bp_seg_t plan_r3[] = {
 
 /* -------------------------------------------------------------------- USA */
 
-/* FCC Part 97 for an Amateur Extra operator in the continental United States, Region 2.
- * Phone edges are 97.305 inside the Extra allocation of 97.301(b). A data window inside a
- * RTTY/data segment is marked digital so FT8 does not flip the radio to CW; the window is
- * customary, and it sits where data is actually authorized. License classes with a narrower
- * phone segment (General on 75 m from 3.8, on 40 m from 7.175, on 20 m from 14.225) are not
- * drawn: the strip has no class. */
+/* FCC Part 97, continental United States, Region 2, read from the eCFR on 28 October 2026.
+ * 97.301 is which frequencies the class may transmit on. 97.305 is which emissions, and
+ * 97.305(a) allows CW on any frequency the operator is authorized. A data window inside a
+ * RTTY/data segment is marked digital so FT8 does not flip the radio to CW. The window is
+ * customary, and it sits where data is actually authorized.
+ *
+ * Extra is the default class: this first table is the one the radio drew before there was
+ * a class. Advanced, General, Technician and Novice are further tables. A hole (General
+ * has no 7.125-7.175) is left out, so the strip has no colour there. Nothing in these
+ * tables stops the receiver, and nothing refuses a transmission: MARS, CAP and emergency
+ * use are the operator's, and the colour is only a warning. */
+
 static const bp_seg_t plan_usa[] = {
     /* 160 m. 97.305 authorizes phone, image, RTTY and data on the entire band, so the FCC
      * draws no phone edge. The split is the on-air one: digital 1.800-1.810, CW to 1.840,
@@ -166,7 +173,92 @@ static const bp_seg_t plan_usa[] = {
     /* 6 m. 97.305(c) starts phone and data at 50.1, so 50.0-50.1 is CW. Beacons 50.06-50.08
      * are 97.203. 50.300-50.350 is the FT8 window inside the phone segment. */
     { 50000000, 50060000, BP_CW  }, { 50060000, 50080000, BP_BCN }, { 50080000, 50100000, BP_CW  },
+    { 50100000, 50300000, BP_ALL },     { 50300000, 50350000, BP_DIG }, { 50350000, 54000000, BP_ALL },
+};
+
+/* Advanced, 97.301(c). The bottom 25 kHz of 80, 40, 20 and 15 m is Extra only.
+ * 3.600-3.700, 14.150-14.175 and 21.200-21.225 are Extra only as well: they are
+ * not in the Advanced rows of 97.301(c). Phone on 40 m starts at 7.125, the same
+ * edge as Extra (97.305). 160, 60, 30, 17, 12, 10 and 6 m match Extra. */
+static const bp_seg_t plan_usa_adv[] = {
+    {  1800000,  1810000, BP_DIG }, {  1810000,  1840000, BP_CW  }, {  1840000,  2000000, BP_ALL },
+    {  3525000,  3570000, BP_CW  }, {  3570000,  3600000, BP_DIG },
+    {  3700000,  4000000, BP_ALL },
+    {  5330500,  5333300, BP_ALL }, {  5346500,  5349300, BP_ALL },
+    {  5351500,  5354000, BP_CW  }, {  5354000,  5366000, BP_ALL }, {  5366000,  5366500, BP_DIG },
+    {  5371500,  5374300, BP_ALL }, {  5403500,  5406300, BP_ALL },
+    {  7025000,  7040000, BP_CW  }, {  7040000,  7100000, BP_DIG },
+    {  7100000,  7125000, BP_CW  }, {  7125000,  7300000, BP_ALL },
+    { 10100000, 10130000, BP_CW  }, { 10130000, 10150000, BP_DIG },
+    { 14025000, 14070000, BP_CW  }, { 14070000, 14099000, BP_DIG }, { 14099000, 14101000, BP_BCN },
+    { 14101000, 14150000, BP_DIG },
+    { 14175000, 14350000, BP_ALL },
+    { 18068000, 18095000, BP_CW  }, { 18095000, 18109000, BP_DIG }, { 18109000, 18111000, BP_BCN },
+    { 18111000, 18168000, BP_ALL },
+    { 21025000, 21070000, BP_CW  }, { 21070000, 21149000, BP_DIG }, { 21149000, 21151000, BP_BCN },
+    { 21151000, 21200000, BP_DIG },
+    { 21225000, 21450000, BP_ALL },
+    { 24890000, 24915000, BP_CW  }, { 24915000, 24929000, BP_DIG }, { 24929000, 24931000, BP_BCN },
+    { 24931000, 24990000, BP_ALL },
+    { 28000000, 28070000, BP_CW  }, { 28070000, 28200000, BP_DIG }, { 28200000, 28300000, BP_BCN },
+    { 28300000, 29700000, BP_ALL },
+    { 50000000, 50060000, BP_CW  }, { 50060000, 50080000, BP_BCN }, { 50080000, 50100000, BP_CW  },
     { 50100000, 50300000, BP_ALL }, { 50300000, 50350000, BP_DIG }, { 50350000, 54000000, BP_ALL },
+};
+
+/* General, 97.301(d). Phone: 3.800, 7.175, 14.225, 21.275, and 28.300 as for Extra.
+ * 7.125-7.175, 14.150-14.225 and 21.200-21.275 are not General frequencies at all.
+ * 3.600-3.800 is not either. 160, 60, 30, 17, 12, 10 and 6 m match Extra. */
+static const bp_seg_t plan_usa_gen[] = {
+    {  1800000,  1810000, BP_DIG }, {  1810000,  1840000, BP_CW  }, {  1840000,  2000000, BP_ALL },
+    {  3525000,  3570000, BP_CW  }, {  3570000,  3600000, BP_DIG },
+    {  3800000,  4000000, BP_ALL },
+    {  5330500,  5333300, BP_ALL }, {  5346500,  5349300, BP_ALL },
+    {  5351500,  5354000, BP_CW  }, {  5354000,  5366000, BP_ALL }, {  5366000,  5366500, BP_DIG },
+    {  5371500,  5374300, BP_ALL }, {  5403500,  5406300, BP_ALL },
+    {  7025000,  7040000, BP_CW  }, {  7040000,  7100000, BP_DIG },
+    {  7100000,  7125000, BP_CW  },
+    {  7175000,  7300000, BP_ALL },
+    { 10100000, 10130000, BP_CW  }, { 10130000, 10150000, BP_DIG },
+    { 14025000, 14070000, BP_CW  }, { 14070000, 14099000, BP_DIG }, { 14099000, 14101000, BP_BCN },
+    { 14101000, 14150000, BP_DIG },
+    { 14225000, 14350000, BP_ALL },
+    { 18068000, 18095000, BP_CW  }, { 18095000, 18109000, BP_DIG }, { 18109000, 18111000, BP_BCN },
+    { 18111000, 18168000, BP_ALL },
+    { 21025000, 21070000, BP_CW  }, { 21070000, 21149000, BP_DIG }, { 21149000, 21151000, BP_BCN },
+    { 21151000, 21200000, BP_DIG },
+    { 21275000, 21450000, BP_ALL },
+    { 24890000, 24915000, BP_CW  }, { 24915000, 24929000, BP_DIG }, { 24929000, 24931000, BP_BCN },
+    { 24931000, 24990000, BP_ALL },
+    { 28000000, 28070000, BP_CW  }, { 28070000, 28200000, BP_DIG }, { 28200000, 28300000, BP_BCN },
+    { 28300000, 29700000, BP_ALL },
+    { 50000000, 50060000, BP_CW  }, { 50060000, 50080000, BP_BCN }, { 50080000, 50100000, BP_CW  },
+    { 50100000, 50300000, BP_ALL }, { 50300000, 50350000, BP_DIG }, { 50350000, 54000000, BP_ALL },
+};
+
+/* Technician. HF is 97.301(e), shared with Novice: CW on 80, 40 and 15 m, and 10 m
+ * to 28.5 (data to 28.3, phone 28.3-28.5, 97.305). 6 m and the rest of VHF are
+ * 97.301(a), which includes Technician and does not include Novice. No 160, 60, 40 m
+ * phone, 30, 20, 17 or 12 m. */
+static const bp_seg_t plan_usa_tech[] = {
+    {  3525000,  3600000, BP_CW  },
+    {  7025000,  7125000, BP_CW  },
+    { 21025000, 21200000, BP_CW  },
+    { 28000000, 28070000, BP_CW  }, { 28070000, 28200000, BP_DIG }, { 28200000, 28300000, BP_BCN },
+    { 28300000, 28500000, BP_ALL },
+    { 50000000, 50060000, BP_CW  }, { 50060000, 50080000, BP_BCN }, { 50080000, 50100000, BP_CW  },
+    { 50100000, 50300000, BP_ALL }, { 50300000, 50350000, BP_DIG }, { 50350000, 54000000, BP_ALL },
+};
+
+/* Novice HF is the same 97.301(e) rows as Technician. No 6 m: 97.301(a) starts at
+ * Technician. Above HF, 97.301(e) gives Novice 222-225 and 1270-1295 only; those are
+ * not drawn here (the strip's tables stop at 6 m) and are handled with the warning. */
+static const bp_seg_t plan_usa_nov[] = {
+    {  3525000,  3600000, BP_CW  },
+    {  7025000,  7125000, BP_CW  },
+    { 21025000, 21200000, BP_CW  },
+    { 28000000, 28070000, BP_CW  }, { 28070000, 28200000, BP_DIG }, { 28200000, 28300000, BP_BCN },
+    { 28300000, 28500000, BP_ALL },
 };
 
 /* ------------------------------------------------------------------ prefixes */
@@ -406,19 +498,175 @@ int band_plan_resolve(int sel, const char *call) {
     return band_plan_from_call(call);
 }
 
-int band_plan_table(int plan, const bp_seg_t **out) {
+static int class_ok(int cls) {
+    if (cls < BP_CLASS_EXTRA || cls > BP_CLASS_NOVICE) {
+        return BP_CLASS_EXTRA;
+    }
+    return cls;
+}
+
+int band_plan_table(int plan, int cls, const bp_seg_t **out) {
     const bp_seg_t *t = NULL;
     int             n = 0;
 
     switch (plan) {
-    case BP_PLAN_R1:  t = plan_r1;  n = (int)(sizeof(plan_r1) / sizeof(plan_r1[0])); break;
-    case BP_PLAN_R2:  t = plan_r2;  n = (int)(sizeof(plan_r2) / sizeof(plan_r2[0])); break;
-    case BP_PLAN_R3:  t = plan_r3;  n = (int)(sizeof(plan_r3) / sizeof(plan_r3[0])); break;
-    case BP_PLAN_USA: t = plan_usa; n = (int)(sizeof(plan_usa) / sizeof(plan_usa[0])); break;
-    default:          return 0;
+    case BP_PLAN_R1: t = plan_r1; n = (int)(sizeof(plan_r1) / sizeof(plan_r1[0])); break;
+    case BP_PLAN_R2: t = plan_r2; n = (int)(sizeof(plan_r2) / sizeof(plan_r2[0])); break;
+    case BP_PLAN_R3: t = plan_r3; n = (int)(sizeof(plan_r3) / sizeof(plan_r3[0])); break;
+    case BP_PLAN_USA:
+        switch (class_ok(cls)) {
+        case BP_CLASS_ADVANCED:   t = plan_usa_adv;  n = (int)(sizeof(plan_usa_adv) / sizeof(plan_usa_adv[0])); break;
+        case BP_CLASS_GENERAL:    t = plan_usa_gen;  n = (int)(sizeof(plan_usa_gen) / sizeof(plan_usa_gen[0])); break;
+        case BP_CLASS_TECHNICIAN: t = plan_usa_tech; n = (int)(sizeof(plan_usa_tech) / sizeof(plan_usa_tech[0])); break;
+        case BP_CLASS_NOVICE:     t = plan_usa_nov;  n = (int)(sizeof(plan_usa_nov) / sizeof(plan_usa_nov[0])); break;
+        default:                  t = plan_usa;      n = (int)(sizeof(plan_usa) / sizeof(plan_usa[0])); break;
+        }
+        break;
+    default:
+        return 0;
     }
     if (out) {
         *out = t;
     }
     return n;
+}
+
+/* Above 6 m, where the strip's tables stop. least is the least privileged class that may
+ * transmit there (Extra is 0, so a smaller class number is included). Novice is only
+ * 222-225 and 1270-1295, from 97.301(e). Technician and above have 97.301(a). */
+static const struct {
+    int32_t a, e;
+    int     least;
+} usa_vhf[] = {
+    {  144000000,  148000000, BP_CLASS_TECHNICIAN },
+    {  219000000,  220000000, BP_CLASS_TECHNICIAN },
+    {  222000000,  225000000, BP_CLASS_NOVICE },
+    {  420000000,  450000000, BP_CLASS_TECHNICIAN },
+    {  902000000,  928000000, BP_CLASS_TECHNICIAN },
+    { 1240000000, 1300000000, BP_CLASS_TECHNICIAN },
+    { 1270000000, 1295000000, BP_CLASS_NOVICE },
+};
+
+static int in_segs(const bp_seg_t *t, int n, int32_t hz) {
+    int i;
+
+    for (i = 0; i < n; i++) {
+        if (hz >= t[i].start && hz < t[i].end) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static int vhf_hit(int32_t hz, int cls, int any) {
+    size_t i;
+
+    for (i = 0; i < sizeof(usa_vhf) / sizeof(usa_vhf[0]); i++) {
+        if (hz < usa_vhf[i].a || hz >= usa_vhf[i].e) {
+            continue;
+        }
+        if (any || cls <= usa_vhf[i].least) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int band_plan_tx_warn(int plan, int cls, int32_t freq) {
+    int c;
+    int known = 0;
+
+    if (plan != BP_PLAN_USA) {
+        return 0;
+    }
+    cls = class_ok(cls);
+    {
+        const bp_seg_t *mine = NULL;
+        int             n    = band_plan_table(BP_PLAN_USA, cls, &mine);
+
+        if (in_segs(mine, n, freq) || vhf_hit(freq, cls, 0)) {
+            return 0;
+        }
+    }
+    for (c = BP_CLASS_EXTRA; c <= BP_CLASS_NOVICE; c++) {
+        const bp_seg_t *t = NULL;
+        int             n = band_plan_table(BP_PLAN_USA, c, &t);
+
+        if (in_segs(t, n, freq)) {
+            known = 1;
+            break;
+        }
+    }
+    if (!known) {
+        known = vhf_hit(freq, 0, 1);
+    }
+    return known;
+}
+
+static int edge_cmp(const void *a, const void *b) {
+    int32_t x = *(const int32_t *)a, y = *(const int32_t *)b;
+
+    return x < y ? -1 : x > y;
+}
+
+int band_plan_keep_span(int plan, int cls, int32_t start, int32_t end,
+                        int32_t *out_s, int32_t *out_e, int max) {
+    int32_t edge[512];
+    int     ne = 0;
+    int     nout = 0;
+    int     c, i;
+
+    if (!out_s || !out_e || max <= 0 || start >= end) {
+        return 0;
+    }
+    if (plan != BP_PLAN_USA) {
+        out_s[0] = start;
+        out_e[0] = end;
+        return 1;
+    }
+    cls = class_ok(cls);
+    edge[ne++] = start;
+    edge[ne++] = end;
+    for (c = BP_CLASS_EXTRA; c <= BP_CLASS_NOVICE; c++) {
+        const bp_seg_t *t = NULL;
+        int             n = band_plan_table(BP_PLAN_USA, c, &t);
+
+        for (i = 0; i < n; i++) {
+            if (t[i].start > start && t[i].start < end && ne < (int)(sizeof(edge) / sizeof(edge[0]))) {
+                edge[ne++] = t[i].start;
+            }
+            if (t[i].end > start && t[i].end < end && ne < (int)(sizeof(edge) / sizeof(edge[0]))) {
+                edge[ne++] = t[i].end;
+            }
+        }
+    }
+    for (i = 0; i < (int)(sizeof(usa_vhf) / sizeof(usa_vhf[0])); i++) {
+        if (usa_vhf[i].a > start && usa_vhf[i].a < end && ne < (int)(sizeof(edge) / sizeof(edge[0]))) {
+            edge[ne++] = usa_vhf[i].a;
+        }
+        if (usa_vhf[i].e > start && usa_vhf[i].e < end && ne < (int)(sizeof(edge) / sizeof(edge[0]))) {
+            edge[ne++] = usa_vhf[i].e;
+        }
+    }
+    qsort(edge, (size_t)ne, sizeof(edge[0]), edge_cmp);
+    for (i = 0; i < ne - 1 && nout < max; i++) {
+        int32_t a = edge[i], b = edge[i + 1];
+        int32_t mid;
+
+        if (a >= b) {
+            continue;
+        }
+        mid = a + (b - a) / 2;
+        if (band_plan_tx_warn(BP_PLAN_USA, cls, mid)) {
+            continue;
+        }
+        if (nout > 0 && out_e[nout - 1] == a) {
+            out_e[nout - 1] = b;
+        } else {
+            out_s[nout] = a;
+            out_e[nout] = b;
+            nout++;
+        }
+    }
+    return nout;
 }

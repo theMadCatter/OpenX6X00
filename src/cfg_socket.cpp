@@ -28,6 +28,7 @@
 
 extern "C" {
     #include "cJSON.h"
+    #include "band_plan_data.h"
     #include "params/params.h"
     #include "radio.h"
     #include "scheduler.h"
@@ -59,6 +60,7 @@ static const struct {
     {"wf_speed", &cfg_sm.p_waterfall_speed, 1, 5},
     {"band_plan", &cfg_sm.p_band_plan, 0, 1},
     {"band_plan_sel", &cfg_sm.p_band_plan_sel, 0, 4},   /* Auto, Region 1, Region 2, Region 3, USA */
+    {"band_plan_class", &cfg_sm.p_band_plan_class, 0, 4}, /* Extra, Advanced, General, Technician, Novice */
     {"cluster_spots_wf", &cfg_sm.p_cluster_spots_wf, 0, 1},
     {"cluster_column", &cfg_sm.p_cluster_column, 0, 1},
     {"cluster_order", &cfg_sm.p_cluster_order, 0, 1},
@@ -226,9 +228,16 @@ static int disp_get(char *buf, size_t size) {
         l += snprintf(buf + l, size - l, ",\"%s\":%d", o.name, (int)o.p->get());
     for (auto &o : disp_bools)
         l += snprintf(buf + l, size - l, ",\"%s\":%d", o.name, o.b->x ? 1 : 0);
+    /* Callsign maps to the USA plan. The page shows the license class when the setting is
+     * USA, or Auto and this is 1. Not a setting: posting it is "Unknown option". */
+    char call[32];
+    params_lock();
+    snprintf(call, sizeof(call), "%s", params.callsign.x);
+    params_unlock(NULL);
     l += snprintf(buf + l, size - l,
-                  ",\"auto_level_offset\":%d,\"bright_normal\":%d,\"bright_idle\":%d,\"bright_timeout\":%d,"
+                  ",\"band_plan_usa\":%d,\"auto_level_offset\":%d,\"bright_normal\":%d,\"bright_idle\":%d,\"bright_timeout\":%d,"
                   "\"bright_buttons\":%d,\"screen_off_min\":%d,\"screen_off_always\":%d,\"theme\":\"%s\",\"themes\":[",
+                  band_plan_from_call(call) == BP_PLAN_USA ? 1 : 0,
                   (int)lroundf(cfg_sm.p_auto_level_offset.get() * 10), params.brightness_normal, params.brightness_idle,
                   params.brightness_timeout, (int)params.brightness_buttons, params.screen_off_min, params.screen_off_always ? 1 : 0,
                   params.theme_name.x);

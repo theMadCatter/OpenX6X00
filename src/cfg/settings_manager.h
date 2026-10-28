@@ -207,6 +207,12 @@ class SettingsManager {
     // know is treated as Region 1.
     Parameter<int32_t> p_band_plan_sel{"band_plan_sel", 0, 0, 4,
         StorageType::GLOBAL, pending_writes_, &global_params_};
+    // USA plan only (the row is hidden otherwise). 0 Extra, the default, so the strip
+    // stays as it was until an operator picks a class. 1 Advanced, 2 General,
+    // 3 Technician, 4 Novice. 97.301/97.305. The class colours the strip and warns on
+    // the TX frequency. It does not stop tuning, receiving or transmitting.
+    Parameter<int32_t> p_band_plan_class{"band_plan_class", 0, 0, 4,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
     // The broadcast on air (EiBi) in the frequency strip, in place of the band
     Parameter<int32_t> p_broadcast_name{"broadcast_name", true, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_};

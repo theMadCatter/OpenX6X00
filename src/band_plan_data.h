@@ -47,6 +47,16 @@ enum {
     BP_PLAN_USA  = 4
 };
 
+/* USA plan only. 0 is Extra, the default, so a radio that never chose a class keeps the strip
+ * it had. The order is the Settings dropdown. A value this build does not know is Extra. */
+enum {
+    BP_CLASS_EXTRA = 0,
+    BP_CLASS_ADVANCED,
+    BP_CLASS_GENERAL,
+    BP_CLASS_TECHNICIAN,
+    BP_CLASS_NOVICE
+};
+
 /* The plan a callsign selects: USA for K, N, W and AA-AL, otherwise the ITU region of the
  * prefix, and Region 1 when the callsign is empty or nothing in the table matches. A portable
  * designator (P, M, MM, AM, QRP, A, R, or a single digit) is ignored; "KH6/W1AW" and
@@ -57,9 +67,22 @@ int band_plan_from_call(const char *call);
  * this build does not know is Region 1, the plan the radio showed before there was a choice. */
 int band_plan_resolve(int sel, const char *call);
 
-/* The segments of a resolved plan (never Auto). False ids return 0 and leave *out alone.
- * The pointer is to a static table and stays valid. */
-int band_plan_table(int plan, const bp_seg_t **out);
+/* The segments of a resolved plan (never Auto). cls is the USA license class and is ignored
+ * for every other plan. False ids return 0 and leave *out alone. The pointer is to a static
+ * table and stays valid. */
+int band_plan_table(int plan, int cls, const bp_seg_t **out);
+
+/* 1 when plan is the USA plan and freq is an amateur frequency this class may not transmit on.
+ * 0 when the class does not apply, when freq is inside the class's privileges, or when freq is
+ * not an amateur allocation these tables know. A warning for the strip and the TX indicator
+ * only: the radio still tunes, receives and transmits there. */
+int band_plan_tx_warn(int plan, int cls, int32_t freq);
+
+/* The parts of [start, end) the gap filler may still paint. A USA class drops the stretches
+ * that are amateur spectrum it may not transmit on, and keeps a band the operator added
+ * outside those allocations. Any other plan returns the whole range. Writes up to max pieces. */
+int band_plan_keep_span(int plan, int cls, int32_t start, int32_t end,
+                        int32_t *out_s, int32_t *out_e, int max);
 
 #ifdef __cplusplus
 }

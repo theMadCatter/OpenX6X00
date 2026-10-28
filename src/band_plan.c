@@ -70,6 +70,19 @@ static int selected_plan(void) {
     }
     return band_plan_resolve(sel, call);
 }
+
+/* Extra when the setting is missing or out of range. Ignored unless the plan is USA. */
+static int selected_class(void) {
+    int cls = BP_CLASS_EXTRA;
+
+    if (cfg_band_plan_class) {
+        cls = param_i_get(cfg_band_plan_class);
+    }
+    if (cls < BP_CLASS_EXTRA || cls > BP_CLASS_NOVICE) {
+        cls = BP_CLASS_EXTRA;
+    }
+    return cls;
+}
 static bp_seg_t        cur[MAX_SEG];
 static int             ncur;
 static pthread_mutex_t cur_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -94,8 +107,10 @@ void band_plan_reload(void) {
     static char    names[BANDS][16];
     static bp_seg_t list[MAX_SEG];
     const bp_seg_t *table = NULL;
+    int             plan  = selected_plan();
+    int             cls   = selected_class();
     int             nb    = cfg_bands_active_ids(ids, start, stop, names, BANDS);
-    int             n     = band_plan_table(selected_plan(), &table);
+    int             n     = band_plan_table(plan, cls, &table);
 
     /* A plan this build does not know returns nothing. Region 1 is the fallback inside
      * band_plan_resolve, so this is only a guard against copying past the array. */
@@ -120,14 +135,29 @@ void band_plan_reload(void) {
         int       base = n;
 
         qsort(list, n, sizeof(list[0]), by_start);
-        /* The parts of [a, e] no segment covers yet */
+        /* The parts of [a, e] no segment covers yet. On the USA plan a hole that is amateur
+         * spectrum this class may not transmit on stays empty: the stock 20 m band must not
+         * paint a Technician's strip. A band outside those allocations (one the operator added)
+         * is still filled. */
         for (int k = 0; k < base && a < e && n < MAX_SEG; k++) {
+            int32_t ps[8], pe[8];
+            int     np, p;
+
             if (list[k].end <= a) continue;
             if (list[k].start >= e) break;
-            if (list[k].start > a) list[n++] = (bp_seg_t){a, list[k].start, t};
+            if (list[k].start > a) {
+                np = band_plan_keep_span(plan, cls, a, list[k].start, ps, pe, 8);
+                for (p = 0; p < np && n < MAX_SEG; p++) list[n++] = (bp_seg_t){ps[p], pe[p], t};
+            }
             a = list[k].end > a ? list[k].end : a;
         }
-        if (a < e && n < MAX_SEG) list[n++] = (bp_seg_t){a, e, t};
+        if (a < e && n < MAX_SEG) {
+            int32_t ps[8], pe[8];
+            int     np = band_plan_keep_span(plan, cls, a, e, ps, pe, 8);
+            int     p;
+
+            for (p = 0; p < np && n < MAX_SEG; p++) list[n++] = (bp_seg_t){ps[p], pe[p], t};
+        }
     }
     qsort(list, n, sizeof(list[0]), by_start);
     pthread_mutex_lock(&cur_lock);
@@ -281,4 +311,8 @@ int band_plan_type(int32_t freq) {
 
 bool band_plan_is_cw(int32_t freq) {
     return band_plan_type(freq) == BP_CW;
+}
+
+bool band_plan_tx_warning(int32_t freq) {
+    return band_plan_tx_warn(selected_plan(), selected_class(), freq) != 0;
 }

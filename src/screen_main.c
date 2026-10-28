@@ -1425,6 +1425,7 @@ static void build(void) {
     /* Not and_notify: band_plan_init has already loaded the plan. A theme rebuild subscribes again
      * under subject_no_duplicates, so this does not stack. */
     subject_subscribe_delayed((Subject*)cfg_band_plan_sel, on_band_plan_sel_change, NULL);
+    subject_subscribe_delayed((Subject*)cfg_band_plan_class, on_band_plan_sel_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_band_id, on_band_id_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_wr12, on_wr12_change, NULL);
     subject_subscribe_delayed((Subject*)cfg_cluster_column, on_cluster_column_change, NULL);

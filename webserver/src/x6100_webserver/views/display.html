@@ -60,6 +60,7 @@ const CARDS = [
   ["layers", "On the waterfall", "What is drawn over it", [
     ["band_plan", "Band plan", "The segments on top of the waterfall", "sw"],
     ["band_plan_sel", "Band plan region", "Auto reads the station callsign (K, N, W and AA-AL use the USA plan, another known prefix its ITU region, an empty or unknown callsign Region 1). Region 1 keeps the original strip whatever the callsign says", "sel", ["Auto", "Region 1", "Region 2", "Region 3", "USA"]],
+    ["band_plan_class", "US license class", "Extra is the default. The strip and the transmit warning follow this class. Tuning, receiving and transmitting stay available on every frequency; the operator is responsible, including MARS, CAP and emergency use", "sel", ["Extra", "Advanced", "General", "Technician", "Novice"]],
     ["cluster_spots_wf", "Cluster spots", "The calls at their frequencies", "sw"],
     ["cluster_column", "Cluster column", "The spot list on the right", "sw"]]],
   ["sun", "Backlight", "Screen and button lights", [
@@ -232,6 +233,10 @@ var refresh = function() {
   $("#row-smeter_bar_color").toggleClass("off", D.smeter_color !== 0 || (D.smeter_needle === 1 && D.smeter_lamp === 1));
   $("#row-smeter_lamp").toggleClass("off", D.smeter_needle !== 1);
   $("#row-smeter_color").toggleClass("off", D.smeter_needle === 1 && D.smeter_lamp === 1);
+  /* Shown while the USA plan is selected, or Auto and the callsign maps to USA. Hidden otherwise
+   * (display none). .off only dims a row, so it is the wrong tool here. */
+  var usaOn = D.band_plan_sel === 4 || (D.band_plan_sel === 0 && D.band_plan_usa === 1);
+  $("#row-band_plan_class").toggle(!!usaOn);
   $("#prev").html(preview());
 }
 

@@ -4,12 +4,14 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "tx_meters.h"
 
 #include <stdio.h>
 
+#include "band_plan.h"
 #include "gui_events.h"
 #include "params/params.h"
 #include "cfg/cfg_api.h"
@@ -158,6 +160,8 @@ static void update_head(void) {
 
     split_freq(f, &mhz, &khz, &hz);
     lv_label_set_text_fmt(head_label, "%s - %i.%03i.%03i", info_params_mode_label_get(), mhz, khz, hz);
+    /* The class warns. The key still works: MARS, CAP and emergency are the operator's. */
+    lv_obj_set_style_text_color(head_label, band_plan_tx_warning(f) ? TC(warn) : TC(text_head), 0);
     lv_label_set_text_fmt(time_label, "%02u:%02u", (unsigned)(s / 60), (unsigned)(s % 60));
 }
 

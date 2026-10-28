@@ -48,6 +48,11 @@ int band_plan_type(int32_t freq);
 /* freq (Hz) is in a CW segment */
 bool band_plan_is_cw(int32_t freq);
 
+/* The USA plan is in use and freq is an amateur frequency the selected class may not transmit
+ * on. The frequency turns the warning colour. Receiving is unchanged, and the radio still
+ * transmits: the operator decides, including MARS, CAP and emergency traffic. */
+bool band_plan_tx_warning(int32_t freq);
+
 #ifdef __cplusplus
 }
 #endif

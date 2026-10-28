@@ -4,10 +4,12 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "info_bar.h"
 
+#include "band_plan.h"
 #include "cfg/cfg_api.h"
 #include "gui_styles.h"
 #include "radio.h"
@@ -134,6 +136,8 @@ lv_obj_t *info_init(lv_obj_t *parent) {
     subject_subscribe_delayed((Subject *)cfg_band_tx_shift, vfo_update, NULL);
     subject_subscribe_delayed((Subject *)cfg_fg_freq, vfo_update, NULL);    /* where it transmits, for the colour */
     subject_subscribe_delayed((Subject *)cfg_bg_freq, vfo_update, NULL);
+    subject_subscribe_delayed((Subject *)cfg_band_plan_sel, vfo_update, NULL);    /* USA class warning */
+    subject_subscribe_delayed((Subject *)cfg_band_plan_class, vfo_update, NULL);
     subject_subscribe_delayed_and_notify((Subject *)cfg_band_split, vfo_update, NULL);
     subject_subscribe_delayed((Subject *)cfg_cur_mode, mode_update, NULL);
     subject_subscribe_delayed_and_notify((Subject *)mode_locked, mode_update, NULL);
@@ -455,10 +459,19 @@ static void *status_thread(void *arg) {
 }
 
 
-/* The error colour in split when the radio cannot transmit on the other VFO: a TX shift that took it off the band */
+/* Error colour: split, and the hardware cannot transmit there (broadcast, airband, WR12, a shift
+ * off the band). Warning colour: the USA license class has no privilege on that amateur frequency.
+ * The warning does not refuse the transmission. */
 static void vfo_update(Subject *subj, void *user_data) {
+    lv_color_t c = TC(text);
+
     lv_label_set_text(items[INFO_VFO], info_params_vfo_label_get());
-    lv_obj_set_style_text_color(items[INFO_VFO], info_tx_blocked() ? TC(err) : TC(text), 0);
+    if (info_tx_blocked()) {
+        c = TC(err);
+    } else if (band_plan_tx_warning(radio_tx_freq())) {
+        c = TC(warn);
+    }
+    lv_obj_set_style_text_color(items[INFO_VFO], c, 0);
 }
 
 /* Digital modes in their own colour; a mode an app holds, soft */

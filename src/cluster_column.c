@@ -1,5 +1,7 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "cluster_column.h"
@@ -254,7 +256,7 @@ static void timer_cb(lv_timer_t *t) {
     int      n   = cluster_client_snapshot(spots, CLUSTER_MAX_SPOTS, &spots_gen);
     uint16_t min = (time(NULL) / 60) % 1440;
 
-    vfo = cparam_i_get(cfg_fg_freq);
+    vfo = cparam_hz_get(cfg_fg_freq);
     if (n >= 0) {
         spots_n = n;
     }
@@ -311,7 +313,7 @@ void cluster_column_layout(lv_coord_t y) {
 }
 
 void cluster_column_refresh(void) {
-    vfo      = cparam_i_get(cfg_fg_freq);
+    vfo      = cparam_hz_get(cfg_fg_freq);
     last_vfo = vfo;
     redraw();
 }

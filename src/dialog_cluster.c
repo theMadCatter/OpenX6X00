@@ -4,6 +4,8 @@
  *  DX cluster app: spots from a telnet DX cluster over WiFi, listed by
  *  frequency around the VFO. Tuning the VFO keeps the list centred on it;
  *  the MFK browses the list and a press tunes to the selected spot.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_cluster.h"
@@ -345,7 +347,7 @@ static void alert_scan(void) {
 }
 
 static int vfo_band(void) {
-    return cluster_band_of(cparam_i_get(cfg_fg_freq));
+    return cluster_band_of(cparam_hz_get(cfg_fg_freq));
 }
 
 /* All bands when asked, or when the VFO is outside the amateur bands.
@@ -370,7 +372,7 @@ static int cmp_age(const void *a, const void *b) {
 }
 
 static int nearest_to_vfo(void) {
-    int32_t vfo  = cparam_i_get(cfg_fg_freq);
+    int32_t vfo  = cparam_hz_get(cfg_fg_freq);
     int     best = -1;
     for (int i = 0; i < view_count; i++)
         if (best < 0 || abs(view[i].freq_hz - vfo) < abs(view[best].freq_hz - vfo)) best = i;
@@ -424,7 +426,7 @@ static void rebuild(void) {
     }
     qsort(view, (size_t)view_count, sizeof(view[0]), by_time() ? cmp_age : cmp_freq);
 
-    int32_t vfo = cparam_i_get(cfg_fg_freq);
+    int32_t vfo = cparam_hz_get(cfg_fg_freq);
     row_count   = 0;
     bool marker = by_time(); /* newest first: no VFO row */
     for (int i = 0; i < view_count; i++) {
@@ -459,7 +461,7 @@ static void rebuild(void) {
 }
 
 static void update_header(void) {
-    int32_t vfo = cparam_i_get(cfg_fg_freq);
+    int32_t vfo = cparam_hz_get(cfg_fg_freq);
     lv_label_set_text_fmt(head_left, "CLUSTER #%06x %s# - %s", theme_hex(TC_text), server,
                           params.callsign.x[0] ? params.callsign.x : "no callsign");
     lv_label_set_text_fmt(head_mid, "#%06x %s# - VFO #%06x %d.%03d.%02d#", theme_hex(TC_text),
@@ -557,7 +559,7 @@ static void timer_cb(lv_timer_t *t) {
         changed   = true;
     }
 
-    int32_t vfo  = cparam_i_get(cfg_fg_freq);
+    int32_t vfo  = cparam_hz_get(cfg_fg_freq);
     int     band = vfo_band();
     if (vfo != last_vfo) {
         /* The user is tuning: the list follows the VFO again. */
@@ -616,7 +618,7 @@ static void table_draw_cb(lv_event_t *e) {
         dsc->rect_dsc->border_width = 1;
         dsc->rect_dsc->border_opa   = LV_OPA_COVER;
         dsc->rect_dsc->border_side  = LV_BORDER_SIDE_FULL;
-    } else if (abs(s->freq_hz - cparam_i_get(cfg_fg_freq)) <= NEAR_HZ) {
+    } else if (abs(s->freq_hz - cparam_hz_get(cfg_fg_freq)) <= NEAR_HZ) {
         dsc->rect_dsc->bg_color = lv_color_hex(COLOR_NEAR_BG);
         if (theme_shape.mono) {     /* 1bit: near_bg is the paper; a bar on the left marks it */
             dsc->rect_dsc->border_color = TC(text);
@@ -658,7 +660,7 @@ static void table_draw_end_cb(lv_event_t *e) {
 
     char text[32];
     if (rows[r] == ROW_VFO) {
-        int32_t vfo = cparam_i_get(cfg_fg_freq);
+        int32_t vfo = cparam_hz_get(cfg_fg_freq);
         lv_draw_rect_dsc_t line;
         lv_draw_rect_dsc_init(&line);
         line.bg_color  = lv_color_hex(COLOR_VFO);
@@ -671,7 +673,7 @@ static void table_draw_end_cb(lv_event_t *e) {
     }
 
     const cluster_spot_t *s    = &view[rows[r]];
-    bool                  near = abs(s->freq_hz - cparam_i_get(cfg_fg_freq)) <= NEAR_HZ || rows[r] == sel;
+    bool                  near = abs(s->freq_hz - cparam_hz_get(cfg_fg_freq)) <= NEAR_HZ || rows[r] == sel;
     uint16_t              age  = cluster_age_min(s->utc_min, now_min);
     bool                  alert = flt && cluster_alert_match(flt, s) >= 0;
 
@@ -813,7 +815,7 @@ static void construct_cb(lv_obj_t *parent) {
     now_min    = utc_now_min();
     follow_vfo = true;
     sel        = -1;
-    last_vfo   = cparam_i_get(cfg_fg_freq);
+    last_vfo   = cparam_hz_get(cfg_fg_freq);
     last_band  = vfo_band();
     spots_gen  = 0;
     all_count  = 0;

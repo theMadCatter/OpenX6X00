@@ -12,7 +12,7 @@ Settings. Button and option names are written as the radio shows them.
 - [Getting started](#getting-started): [first steps](#first-steps), [buttons and knobs](#buttons-and-knobs)
 - [Updating the firmware](#updating-the-firmware)
 - [Main screen](#main-screen): [band keys](#band-keys), [receiving outside the ham bands](#receiving-outside-the-ham-bands), [WR12 receiver](#wr12-receiver-x6200), [low battery](#low-battery), [battery time](#battery-time), [status bar](#status-bar), [S-meter](#s-meter), [waterfall](#waterfall), [screen recording](#screen-recording), [Walkie Talkie](#walkie-talkie-mode)
-- [Settings](#settings): [General](#general-tab), [Display](#display-tab), [Audio](#audio-tab), [Wireless](#wireless-tab), [Bluetooth](#bluetooth-tab), [Keys](#keys-tab), [Cluster](#cluster-tab), [TX Cal](#tx-cal-tab), [Info](#info-tab), [Walkie](#walkie-tab)
+- [Settings](#settings): [General](#general-tab), [Transverters](#transverters), [Display](#display-tab), [Audio](#audio-tab), [Wireless](#wireless-tab), [Bluetooth](#bluetooth-tab), [Keys](#keys-tab), [Cluster](#cluster-tab), [TX Cal](#tx-cal-tab), [Info](#info-tab), [Walkie](#walkie-tab)
 - [Transmitting](#transmitting): [TX shift](#tx-shift), [SWR scan and the tuner](#swr-scan-and-the-tuner), [digital-mode TX level](#digital-mode-tx-level), [recording voice messages](#recording-voice-messages), [ALC in CW](#alc-in-cw)
 - [Digital modes](#digital-modes): [opening a mode](#opening-a-mode), [FT8 and FT4](#ft8-and-ft4), [JS8](#js8), [WSPR](#wspr), [SSTV, WeFax and NavTex](#sstv-wefax-and-navtex), [PSK31, PSK63 and Olivia](#psk31-psk63-and-olivia), [JTTY](#jtty), [RTTY and WeFax TX](#rtty-and-wefax-tx)
 - [CW](#cw): [CW decoder](#cw-decoder), [CW from the keyboard](#cw-from-the-keyboard), [CW Keyboard](#cw-keyboard), [USB paddle](#usb-paddle), [CW messages](#cw-messages), [CW Trainer](#cw-trainer)
@@ -142,8 +142,11 @@ of the band list, from the frequency up or down.
 - They skip a band the radio cannot tune: 4 m (70 MHz), and on the X6200 2 m
   and 70 cm, unless a transverter (Settings > General > TRANSVERTERS) or, on
   the X6200, the WR12 covers it (see [WR12 receiver](#wr12-receiver-x6200)).
-  The band plan strip, Birdie Cal and the browser panel's band list leave them
-  out the same way.
+  1.25 m, 33 cm, 23 cm, 13 cm, 9 cm, 6 cm, 3 cm and 1.25 cm come onto the keys
+  the same way, while a transverter covers them. The frequency they show is
+  the true RF. The band plan strip, Birdie Cal and the browser panel's band
+  list leave a band out the same way; Birdie Cal also skips a band above
+  2 GHz and a band wider than 80 MHz.
 - 2 m and 70 cm on the X6100 are transverter bands (Settings > General >
   TRANSVERTERS): they stay on the band keys while a transverter covers them.
 - 60 m (5351.5-5366.5 kHz, WRC-15) is on the band keys, between 80 m and
@@ -168,10 +171,11 @@ of the band list, from the frequency up or down.
   apps, CW from the keyboard, the tuner and the SWR scan are refused there,
   with "No TX on 100.000 MHz: receive only".
 - The same refusal holds anywhere the radio does not transmit: above 55 MHz
-  without a transverter, and what the WR12 receives unless a transverter with
-  a shift covers it (the transverter wins, see
-  [WR12 receiver](#wr12-receiver-x6200)). In split it is the other VFO's
-  frequency, the one the radio would transmit on, that counts.
+  without a transverter, and what the WR12 receives unless a transverter
+  covers it (the transverter wins, see
+  [WR12 receiver](#wr12-receiver-x6200) and [Transverters](#transverters)).
+  In split it is the other VFO's frequency, the one the radio would transmit
+  on, that counts. An RX-only transverter is refused the same way.
 - PRE and ATT are on the VOL 2:2 button page (F1 from the main screen), per
   band. The X6200 has no PRE key, and its receiver is specified with the
   preamplifier on: turn PRE on when the band sounds quiet.
@@ -187,8 +191,8 @@ the web Display page, Receiver card). Off by default.
   keys and the band plan (4 m, 2 m, 70 cm with the default list), and the
   knob and the keypad go up to 1 GHz. They open in NFM. Everything there is
   receive only (PTT, the apps, CW, the tuner and the SWR scan are refused with
-  a message), unless a transverter with a shift covers it: the transverter
-  wins and transmits on its IF. Set its shift to 0 to leave that range to the
+  a message), unless a transverter covers it: the transverter wins and
+  transmits on its IF. Turn that transverter off to leave the range to the
   WR12.
 - Off again while on one of those bands: the radio goes to the band below
   (the airband from 2 m).
@@ -197,14 +201,14 @@ the web Display page, Receiver card). Off by default.
   welcome, with the log of the run (`/mnt/app_logs/`): at every start the
   radio writes there what is on the HOST port ("USB on HOST: ..."), what it
   would need to detect the WR12 by itself.
-- The X6200's two transverters (2 m and 70 cm, 28 MHz IF) are off by default,
+- The X6200's 2 m and 70 cm transverters (28 MHz IF) are off by default,
   so that 2 m and 70 cm are the WR12's. Older versions had them always on:
   "145.500" was tuned and transmitted on 29.500 MHz, on 10 m. A transverter
-  set up in Settings before the update keeps its shift. The three that
-  gdyuldin's X6200 firmware saves (4 m, 2 m and 70 cm through a 28 MHz IF)
+  set up in Settings before the update keeps its LO (the old shift). The three
+  that gdyuldin's X6200 firmware saves (4 m, 2 m and 70 cm through a 28 MHz IF)
   are not taken for yours when they are exactly its values and nothing else
-  is set: they are removed, and the transverters are off. To use one, set
-  its shift in Settings > General > TRANSVERTERS (0 is off).
+  is set: they are removed, and the transverters are off. To use one, turn it
+  on in Settings > General > TRANSVERTERS.
 
 ### Low battery
 
@@ -510,9 +514,60 @@ base is too old.
 | STATION | callsign, QTH locator, Mode from band plan (the knob turned into another band plan segment sets its mode: CW in a CW segment, the band's sideband in a phone segment; SSB and CW only), Independent VFOs (VFO A and VFO B each keep their own band, frequency and mode: the VFO key brings the other one's band back, A=B copies everything to the other VFO; off, both VFOs live in the current band) |
 | DATE / TIME | date, time, time zone |
 | CONTROLS | Freq acceleration, Accel. onset, Charger (Off, On, Shadow), Per band S-meter cal, TX shift of the band the radio is on (see [TX shift](#tx-shift)), Walkie Talkie (see [Walkie Talkie mode](#walkie-talkie-mode)) |
-| TRANSVERTERS | two transverters: from, to, shift in MHz; a shift of 0 is off (the X6200's default, see [WR12 receiver](#wr12-receiver-x6200)) |
+| TRANSVERTERS | twelve transverters: name, from, to and LO in MHz, calibration in kHz, high-side LO, on, RX only, drive cap (see [Transverters](#transverters); the X6200's 2 m and 70 cm start off, see [WR12 receiver](#wr12-receiver-x6200)) |
 | WR12 RECEIVER | the X6200 only: WR12 on HOST (see [WR12 receiver](#wr12-receiver-x6200)) |
 | TCI SERVER | on/off, port and status, connected client, Clients (Operate or Listen only, see [TCI server](#tci-server)) |
+
+### Transverters
+
+Where: Settings > General > TRANSVERTERS, and Frequencies > Transverters in
+the [web configurator](#web-configurator).
+
+Twelve slots. Each has a name, the RF it covers (from, to), a local
+oscillator, a calibration offset, a high-side switch, an on switch, an
+RX-only switch and a drive cap. The dial, a memory, the band keys and the
+log stay on the true RF. The radio is sent the IF, inside 100 kHz to 55 MHz.
+
+- Low-side mixing is RF = LO + IF. High LO is RF = LO − IF, and the sideband
+  sent to the radio is swapped (LSB with USB, LSB-D with USB-D, CW with CW-R).
+  The mode on the screen stays the one you set. AM, FM, SAM and WFM are left
+  as they are.
+- One LO covers about 55 MHz of RF, the width of the HF window. The band in
+  the band list can be wider; the keys and the knob use the slice, the part
+  of that range that maps into the IF. The first slot whose slice contains
+  the frequency wins. A slot you turn on whose whole range falls outside the
+  IF is refused ("That LO does not reach the radio" on the radio, the same
+  words on the web page).
+- 2 m and 70 cm start on for an X6100 (28 MHz IF, the two shifts the old page
+  stored) and off for an X6200, so those ranges stay with the WR12. The other
+  presets start off: 1.25 m, 33 cm, 23 cm, 13 cm, 9 cm, 6 cm, 3 cm
+  (10.000–10.500 GHz) and 1.25 cm (24.000–24.250 GHz). Two slots are empty.
+  A shift set on the old page is kept: 0 stays off, any other shift stays on
+  and becomes the LO.
+- Calibration is the LO error, −9999 to 9999 kHz on the radio (ten megahertz
+  either way). It is added to the LO. The web page stores whole hertz; the
+  radio page stores whole megahertz for from, to and the LO, and whole
+  kilohertz for the calibration, and rounds a slot when you edit it there.
+- Drive is 0.0 to 10.0 W, in tenths. 0 leaves the power you set. Any other
+  value is the most the radio sends while it transmits on that transverter,
+  including a digital mode, and the HF power setting is left as it is. RX only
+  refuses transmit on that slot.
+- A low-side LO of 500 MHz or less is also written as the old shift, so a
+  downgrade of 2 m and 70 cm still tunes. A high-side slot, and any larger
+  LO, writes a shift of 0, so older firmware leaves that transverter off.
+  The calibration is not folded into that shift.
+- With a transverter on, the band keys gain that band and show the true RF.
+  The new bands open in USB. The log records the true RF and the ADIF BAND:
+  2m, 1.25m, 70cm, 33cm, 23cm, 13cm, 9cm, 6cm, 3cm, 1.25cm. 6cm is 5650–5925
+  MHz; 6m stays 50–54 MHz. Above 1000 MHz the log prints the megahertz to
+  1 Hz (10368.100000).
+- The radio does not switch the transverter for you. The pins it drives are
+  WiFi, the backlight, USB-CAT, the Morse key (active low) and the baseband
+  reset. The X6200 HOST port is the WR12 receiver, not a band-select line.
+- CI-V reports the true RF. Under 10 GHz that is five BCD bytes, as CI-V
+  clients expect. At 10 GHz and above the radio sends six BCD bytes; a client
+  that only accepts five cannot hold that frequency. TCI sends the full
+  frequency in hertz. See [Supported CI-V commands](#supported-ci-v-commands).
 
 Main knob acceleration. Where: Settings > General > CONTROLS > Freq
 acceleration.
@@ -920,7 +975,9 @@ column. 0 is off; up to 10 MHz up or down (9999 kHz in Settings).
 - While the shift is on, VFO B is the shift's: a frequency or a mode written
   to B (CAT, A=B) goes back to A + the shift in A's mode (on REV the other
   way round).
-- The radio transmits only where it can (HF, a transverter that is on). Where
+- The radio transmits only where it can (HF, a transverter that is on and is
+  not RX only). A transverter with a drive cap holds the power at that cap
+  for the over and leaves the power setting as it was. Where
   the shift takes B off it (below 0 Hz too, where B itself stops at 100 kHz),
   the VFO on the status bar turns red (in Black Metal and Total Black the
   other VFO's frequency), and PTT, the apps, CW, the tuner and the SWR scan
@@ -2059,8 +2116,9 @@ receiver's own spurs): thin lines on the waterfall that never move with the band
 APP > Birdie Cal finds them. Disconnect the antenna, press **Start**: the scan
 steps the receiver across every active band, a spectrum width at a time, and
 keeps every narrow carrier that stays put between two looks: a few minutes,
-every band the radio transmits on (a transverter's too; not the receive-only
-bands). **Stop** ends it early; what
+every band the radio transmits on (a transverter's too, when that band is
+under 2 GHz and no wider than 80 MHz; not the receive-only bands). **Stop**
+ends it early; what
 was found so far is kept. **Clear**
 forgets them. The list is `/mnt/birdies.txt`, one frequency a line. It holds
 2048; a scan that finds more says so at the end ("List full at 2048: ... more not
@@ -2241,6 +2299,7 @@ The menu has General and four groups:
 |---|---|---|
 | | General | index of the pages |
 | Frequencies | Bands | band edges, default modes and TX shifts ([TX shift](#tx-shift)) |
+| | Transverters | the twelve transverters: RF range, LO, high-side, calibration, RX only, drive cap ([Transverters](#transverters)) |
 | | Digital modes | add, edit and delete the FT8/FT4, JS8, WSPR and FT2 frequencies |
 | | Memories | MEM 1-9 slots and the named channel list ([Channels](#channels)) |
 | Operating | Cluster | DX cluster servers, filters and alerts (writes `/mnt/cluster.conf`) |
@@ -2884,7 +2943,9 @@ Electronics' SDRs, the one AetherSDR serves to WSJT-X and to the
 [VFO-Knob](https://github.com/Guru-RF/VFO-Knob). The radio serves it too:
 one WebSocket carries the frequency, mode, filter, AGC, RIT, drive and PTT
 both ways, the S-meter and the TX meters, and the audio, so a knob or a
-program on the network tunes the radio, hears it and keys it.
+program on the network tunes the radio, hears it and keys it. The frequency
+it sends and receives is the true RF in hertz, including a transverter above
+10 GHz.
 
 - On by default, on whatever network the radio is on. Turn it off in Settings > General > TCI SERVER or on the
   web configurator's TCI page (System > TCI). The port is 50001, the one TCI
@@ -3342,7 +3403,7 @@ Logs page shows them all.
 | `01` | - | Mode (transceive, sent automatically on every change; mode byte only, no filter) | - | - |
 | `03` | - | Read frequency | yes | - |
 | `04` | - | Read mode | yes | - |
-| `05` | - | Set frequency (5 BCD bytes) | - | yes |
+| `05` | - | Set frequency (5 BCD bytes, or 6 at 10 GHz and above) | - | yes |
 | `06` | - | Set mode (`00` LSB, `01` USB, `02` AM, `03` CW, `05` NFM, `07` CW-R) | - | yes |
 | `07` | - / `00` / `01` / `A0` / `B0` | VFO: read current, VFO A, VFO B, A=B, swap A/B; `07 00` / `07 01` also sent automatically when the VFO changes (transceive) | yes | yes |
 | `0F` | - | Split off/on | yes | yes |
@@ -3377,6 +3438,11 @@ Anything else returns `FA` (NG).
 
 Example, read frequency: `FE FE A4 E0 03 FD` →
 `FE FE E0 A4 03 00 50 07 14 00 FD` (14.075.000 Hz).
+
+A frequency under 10 GHz is five BCD bytes (ten digits), on read and on set.
+At 10 GHz and above the radio sends and accepts six BCD bytes. The frequency
+is the true RF, transverter included. A program that only packs five bytes
+cannot represent 10 GHz.
 
 ### btcat-ctl
 

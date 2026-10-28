@@ -3,6 +3,8 @@
  *
  *  Frequency row under the spectrum: the edges of the displayed span and
  *  round reference frequencies in between, lined up with the waterfall.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -27,7 +29,7 @@ void freq_scale_lines_init(lv_obj_t *parent, lv_coord_t y, lv_coord_t h);
 /* The top to y, the bottom where it was */
 void freq_scale_lines_set_y(lv_coord_t y);
 
-void freq_scale_update(int32_t center, int32_t half_width, uint32_t color);
+void freq_scale_update(int64_t center, int32_t half_width, uint32_t color);
 
 #ifdef __cplusplus
 }

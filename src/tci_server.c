@@ -24,6 +24,7 @@
  *  that held it sees "TCI client active" and takes it back on purpose (R3).
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE     /* accept4, pipe2 */
@@ -129,7 +130,8 @@ typedef struct {
 
 /* What the clients are told; read from the radio every STATE_MS */
 typedef struct {
-    int32_t freq, mode, flo, fhi, agc, rit;
+    int64_t freq;
+    int32_t mode, flo, fhi, agc, rit;
     int     drive;
     bool    tx;
 } rstate_t;
@@ -139,7 +141,7 @@ typedef enum { C_FREQ, C_MODE, C_FILTER, C_AGC, C_RIT, C_DRIVE, C_KEY, C_UNKEY }
 
 typedef struct {
     cmd_id_t id;
-    int32_t  a, b;      /* C_KEY: a is the start's number (key_gen); C_UNKEY of the PTT: b is */
+    int64_t  a, b;      /* C_FREQ is true RF Hz (10 GHz and up). C_KEY: a is the start's number */
     bool     tci;
 } cmd_t;
 
@@ -576,7 +578,7 @@ static void apply_cmd(void *arg) {
 
 /* An unkey takes the scheduler's reserve: a flood of tuning must not keep the radio on the air.
  * False: the queue was full, the command is lost */
-static bool put_cmd(cmd_id_t id, int32_t a, int32_t b, bool tci) {
+static bool put_cmd(cmd_id_t id, int64_t a, int64_t b, bool tci) {
     cmd_t c = {.id = id, .a = a, .b = b, .tci = tci};
     if (id == C_UNKEY)
         return scheduler_put_urgent(apply_cmd, &c, sizeof(c));
@@ -589,7 +591,7 @@ static const char *const mode_names[] = {"lsb", "digl", "usb", "digu", "cw", "cw
 static const char *const agc_names[]  = {"off", "slow", "fast", "auto"};
 
 static void state_read(rstate_t *s) {
-    s->freq  = cparam_i_get(cfg_fg_freq);
+    s->freq  = cparam_hz_get(cfg_fg_freq);
     s->mode  = cparam_i_get(cfg_cur_mode);
     s->flo   = cparam_i_get(cfg_cur_filter_low);
     s->fhi   = cparam_i_get(cfg_cur_filter_high);
@@ -635,7 +637,7 @@ static void send_greeting(client_t *c, const rstate_t *s) {
     client_textf(c, "audio_stream_sample_type:%s;", tci_sample_type_name(f.type));
     client_textf(c, "audio_stream_channels:%u;", f.ch);
     client_textf(c, "audio_stream_samples:%u;", f.samples);
-    client_textf(c, "vfo:0,0,%d;", s->freq);
+    client_textf(c, "vfo:0,0,%lld;", (long long)s->freq);
     client_textf(c, "modulation:0,%s;", mode_name(s->mode));
     client_text(c, fb);
     client_textf(c, "agc_mode:0,%s;", agc_name(s->agc));
@@ -669,7 +671,7 @@ static void state_follow(rstate_t *last, bool first) {
         return;
     }
     if (s.freq != last->freq)
-        broadcastf("vfo:0,0,%d;", s.freq);
+        broadcastf("vfo:0,0,%lld;", (long long)s.freq);
     if (s.mode != last->mode)
         broadcastf("modulation:0,%s;", mode_name(s.mode));
     if (s.flo != last->flo || s.fhi != last->fhi || s.mode != last->mode) {
@@ -861,7 +863,7 @@ static void handle_cmd(int ci, char *line) {
     bool may     = !rf || release || (atomic_load(&trust_operate) && (!claim || ctl_claim(CTL_TCI, ci, "TCI", true)));
     if (rf && !may && n >= 2) {
         /* the state as it is, as for a command that changes nothing */
-        if (!strcmp(name, "vfo")) client_textf(c, "vfo:0,0,%d;", s.freq);
+        if (!strcmp(name, "vfo")) client_textf(c, "vfo:0,0,%lld;", (long long)s.freq);
         else if (!strcmp(name, "modulation")) client_textf(c, "modulation:0,%s;", mode_name(s.mode));
         else if (!strcmp(name, "rx_filter_band")) { filter_line(fb, sizeof(fb), &s); client_text(c, fb); }
         else if (!strcmp(name, "agc_mode")) client_textf(c, "agc_mode:0,%s;", agc_name(s.agc));
@@ -874,13 +876,13 @@ static void handle_cmd(int ci, char *line) {
 
     if (!strcmp(name, "vfo")) {
         if (n >= 3 && atoi(a[0]) == 0 && atoi(a[1]) == 0) {
-            int32_t f = (int32_t)strtoll(a[2], NULL, 10);
+            int64_t f = strtoll(a[2], NULL, 10);
             if (f == s.freq)
-                client_textf(c, "vfo:0,0,%d;", s.freq);   /* nothing will change: the echo now */
+                client_textf(c, "vfo:0,0,%lld;", (long long)s.freq);   /* nothing will change: the echo now */
             else
                 put_cmd(C_FREQ, f, 0, false);
         } else {
-            client_textf(c, "vfo:0,0,%d;", s.freq);
+            client_textf(c, "vfo:0,0,%lld;", (long long)s.freq);
         }
     } else if (!strcmp(name, "modulation")) {
         int m = n >= 2 ? mode_index(a[1]) : -1;

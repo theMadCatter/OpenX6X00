@@ -3,6 +3,19 @@
 #include "atu_cache.h"
 #include "settings_manager.h"
 #include "subject.h"
+#include "xvtr_cfg.h"
+
+#include <cstdint>
+
+/* The tuner is not in the path of a transverter, and a 10 GHz dial does not
+ * fit the cache key. Both cases use 0 so they do not collide with an HF memory. */
+static int32_t atu_key_freq() {
+    int64_t rf = cfg_sm.cp_fg_freq.get();
+    if (cfg_xvtr_for_rf(rf, nullptr) || rf < 0 || rf > INT32_MAX) {
+        return 0;
+    }
+    return static_cast<int32_t>(rf);
+}
 
 // The ATU network cache singleton, owned by C++ for the whole program; wired to
 // cp_fg_freq / p_atu_enabled in atu_cache_wire_subscriptions. One antenna
@@ -14,18 +27,18 @@ void atu_cache_wire_subscriptions(void) {
     // Recompute the published loaded/network subjects whenever the antenna,
     // front-panel frequency, or ATU-enabled changes.
     auto on_atu_param_change = [](Subject * /*subj*/, void * /*user_data*/) -> void {
-        g_atu_cache.on_params_changed(ATU_ANT, cfg_sm.cp_fg_freq.get(), cfg_sm.p_atu_enabled.get() != 0);
+        g_atu_cache.on_params_changed(ATU_ANT, atu_key_freq(), cfg_sm.p_atu_enabled.get() != 0);
     };
     // Keep the subscriptions alive for the whole program (never unsubscribed).
     static Subscription atu_freq_obs(cfg_sm.cp_fg_freq.subscribe(on_atu_param_change, nullptr));
     static Subscription atu_enabled_obs(cfg_sm.p_atu_enabled.subscribe(on_atu_param_change, nullptr));
 
     // Initial load: populate the cache for the current antenna/frequency.
-    g_atu_cache.on_params_changed(ATU_ANT, cfg_sm.cp_fg_freq.get(), cfg_sm.p_atu_enabled.get() != 0);
+    g_atu_cache.on_params_changed(ATU_ANT, atu_key_freq(), cfg_sm.p_atu_enabled.get() != 0);
 }
 
 int cfg_atu_save_network(uint32_t network) {
-    return g_atu_cache.save_network(ATU_ANT, cfg_sm.cp_fg_freq.get(), network);
+    return g_atu_cache.save_network(ATU_ANT, atu_key_freq(), network);
 }
 
 bool cfg_atu_is_loaded(void) {

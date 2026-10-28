@@ -12,6 +12,14 @@ int32_t cparam_i_get(const ComputedParamInt *p) {
     return p->get();
 }
 
+void cparam_hz_set(ComputedParamHz *p, int64_t value) {
+    p->set(value);
+}
+
+int64_t cparam_hz_get(const ComputedParamHz *p) {
+    return p->get();
+}
+
 void cparam_f_set(ComputedParamFloat *p, float value) {
     p->set(value);
 }

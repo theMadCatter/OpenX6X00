@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 /*
@@ -46,7 +47,7 @@ extern "C" {
 // Resolve the frequency parameter for a CI-V main/sub VFO selector. vfo_id is
 // the CI-V selector (RADIO_VFO_A = main/selected VFO, RADIO_VFO_B = sub/inactive
 // VFO); cur_vfo identifies which hardware VFO (A or B) is currently active.
-static Parameter<int32_t>& vfo_freq(int vfo_id, int cur_vfo)
+static Parameter<int64_t>& vfo_freq(int vfo_id, int cur_vfo)
 {
     if (vfo_id == RADIO_VFO_A)
     {
@@ -444,7 +445,7 @@ static int32_t ci_cw_pitch_2_x(uint8_t val) {
 }
 
 /* 1A 01: ICOM band codes (BCD: 6 m is 0x10), 0x15 = outside the bands */
-static uint8_t get_ci_band_id(int32_t freq) {
+static uint8_t get_ci_band_id(int64_t freq) {
     switch (freq / 1000) {
         case 1800 ... 2000:   return 0x01;
         case 3400 ... 4100:   return 0x02;
@@ -583,9 +584,9 @@ static void set_unsupported(const Frame *req, Frame *resp) {
 static Frame *process_req(const Frame *req) {
     auto resp = new Frame(req);
 
-    int32_t        new_freq;
+    int64_t        new_freq;
     radio_vfo_t    cur_vfo    = (radio_vfo_t)cfg_sm.p_band_current_vfo.get();
-    int32_t        cur_freq   = cfg_sm.cp_fg_freq.get();
+    int64_t        cur_freq   = cfg_sm.cp_fg_freq.get();
     radio_mode_t   cur_mode   = (radio_mode_t)cfg_sm.cp_cur_mode.get();
     radio_vfo_t    target_vfo = cur_vfo;
     uint8_t        vfo_id;
@@ -594,8 +595,11 @@ static Frame *process_req(const Frame *req) {
 
     switch (req->command) {
         case C_SND_FREQ:
-            if (data_size == 5) {
-                cfg_sm.cp_fg_freq.set(from_bcd(req->data.data(), 10));
+            /* 5 bytes is the usual CI-V frequency (10 digits, up to 9.999999999 GHz).
+             * 6 bytes carries 12 digits, which is what 10.5 GHz and 24 GHz need.
+             * A logger that only sends 5 bytes cannot represent those. */
+            if (data_size == 5 || data_size == 6) {
+                cfg_sm.cp_fg_freq.set((int64_t)from_bcd(req->data.data(), (uint8_t)(data_size * 2)));
                 resp->set_code(CODE_OK);
             } else {
                 set_unsupported(req, resp);
@@ -603,9 +607,13 @@ static Frame *process_req(const Frame *req) {
             break;
 
         case C_RD_FREQ:
-            resp->set_payload_len(6);
-            // bcd len - 5 bytes
-            to_bcd(resp->data.data(), cur_freq, 10);
+            if (cur_freq >= 10000000000LL) {
+                resp->set_payload_len(7);
+                to_bcd(resp->data.data(), (uint64_t)cur_freq, 12);
+            } else {
+                resp->set_payload_len(6);
+                to_bcd(resp->data.data(), (uint64_t)cur_freq, 10);
+            }
             break;
 
         case C_RD_MODE:
@@ -618,8 +626,8 @@ static Frame *process_req(const Frame *req) {
             break;
 
         case C_SET_FREQ:
-            if (data_size == 5) {
-                cfg_sm.cp_fg_freq.set(from_bcd(req->data.data(), 10));
+            if (data_size == 5 || data_size == 6) {
+                cfg_sm.cp_fg_freq.set((int64_t)from_bcd(req->data.data(), (uint8_t)(data_size * 2)));
                 resp->set_code(CODE_OK);
             } else {
                 set_unsupported(req, resp);
@@ -1010,7 +1018,7 @@ static Frame *process_req(const Frame *req) {
 
         case C_SEND_SEL_FREQ:
             {
-                ComputedParameter<int32_t> *freq;
+                ComputedParameter<int64_t> *freq;
                 if (req->data[0] == 0) {
                     // fg freq
                     freq = &cfg_sm.cp_fg_freq;
@@ -1019,10 +1027,17 @@ static Frame *process_req(const Frame *req) {
                     freq = &cfg_sm.cp_bg_freq;
                 }
                 if (data_size == 1) {
-                    resp->set_payload_len(7);
-                    to_bcd(&resp->data[1], freq->get(), 10);
-                } else if (data_size == 6) {
-                    freq->set(from_bcd(&req->data[1], 10));
+                    /* Selector byte, then the same 5 or 6 BCD bytes as C_RD_FREQ. */
+                    int64_t hz = freq->get();
+                    if (hz >= 10000000000LL) {
+                        resp->set_payload_len(8);
+                        to_bcd(&resp->data[1], (uint64_t)hz, 12);
+                    } else {
+                        resp->set_payload_len(7);
+                        to_bcd(&resp->data[1], (uint64_t)hz, 10);
+                    }
+                } else if (data_size == 6 || data_size == 7) {
+                    freq->set((int64_t)from_bcd(&req->data[1], (uint8_t)((data_size - 1) * 2)));
                     resp->set_code(CODE_OK);
                 } else {
                     set_unsupported(req, resp);
@@ -1239,12 +1254,17 @@ static void send_notify(const Frame &frame) {
 }
 
 static void on_fg_freq_change(Subject *s, void *user_data) {
-    auto *p = static_cast<ComputedParameter<int32_t>*>(user_data);
-    int32_t new_freq = p->get();
+    auto *p = static_cast<ComputedParameter<int64_t>*>(user_data);
+    int64_t new_freq = p->get();
     Frame frame{0, LOCAL_ADDRESS, C_SND_FREQ};
-    // bcd len - 5 bytes
-    frame.set_payload_len(6);
-    to_bcd(frame.data.data(), new_freq, 10);
+    /* Five BCD bytes under 10 GHz, six at and above, as C_RD_FREQ. */
+    if (new_freq >= 10000000000LL) {
+        frame.set_payload_len(7);
+        to_bcd(frame.data.data(), (uint64_t)new_freq, 12);
+    } else {
+        frame.set_payload_len(6);
+        to_bcd(frame.data.data(), (uint64_t)new_freq, 10);
+    }
     send_notify(frame);
 }
 

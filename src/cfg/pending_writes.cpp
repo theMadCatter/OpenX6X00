@@ -10,6 +10,11 @@ void PendingWrites::write(const StorageKey &key, int32_t value) {
     pending_ints_[key] = value;
 }
 
+void PendingWrites::write(const StorageKey &key, int64_t value) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    pending_i64_[key] = value;
+}
+
 void PendingWrites::write(const StorageKey &key, float value) {
     std::lock_guard<std::mutex> lock(mutex_);
     pending_floats_[key] = value;
@@ -77,6 +82,8 @@ void PendingWrites::flush_storage(StorageType type, int context_id) {
             int            rc     = SUCCESS;
             if constexpr (std::is_same_v<MappedT, int32_t>) {
                 rc = policy.save_int(key.context_id, key.name.c_str(), it->second);
+            } else if constexpr (std::is_same_v<MappedT, int64_t>) {
+                rc = policy.save_i64(key.context_id, key.name.c_str(), it->second);
             } else if constexpr (std::is_same_v<MappedT, float>) {
                 rc = policy.save_float(key.context_id, key.name.c_str(), it->second);
             } else if constexpr (std::is_same_v<MappedT, std::string>) {
@@ -94,6 +101,7 @@ void PendingWrites::flush_storage(StorageType type, int context_id) {
     };
 
     flush_fn(pending_ints_);
+    flush_fn(pending_i64_);
     flush_fn(pending_floats_);
     flush_fn(pending_texts_);
 }

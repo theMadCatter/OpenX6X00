@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2024 Georgy Dyuldin aka R2RFE
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -22,6 +23,7 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <strings.h>
+#include <math.h>
 
 #define MHZ 1000000
 #define KHZ 1000
@@ -40,14 +42,13 @@ static void write_int(FILE *fd, const char * key, int val);
 static void write_rst(FILE *fd, const char *key, int val, qso_log_mode_t mode);
 
 static void write_date_time(FILE *fd, time_t time);
-static void write_freq(FILE *fd, float freq_mhz);
+static void write_freq(FILE *fd, double freq_mhz);
 static void write_band(FILE *fd, qso_log_band_t band);
 static void write_mode(FILE *fd, qso_log_mode_t mode);
 
 static void copy_str(char * dst, char * src, size_t val_len, size_t dst_len);
 static char * extract_str(const char * src, size_t src_len);
 
-static qso_log_band_t str_to_band(const char * s);
 static qso_log_mode_t create_mode(const char * mode, const char * submode);
 
 
@@ -260,8 +261,8 @@ int adif_read(const char * path, qso_log_record_t ** records, int *skipped) {
             else if (station[0]) COPY_STR(cur->local_call, station, strlen(station));
             cur->time = timegm(&qso_ts);
             cur->mode = create_mode(mode[0] ? mode : NULL, submode[0] ? submode : NULL);
-            if ((qso_log_freq_to_band(cur->freq_mhz * MHZ) != cur->band) &&
-                (qso_log_freq_to_band(cur->freq_mhz * KHZ) == cur->band)) {
+            if ((qso_log_freq_to_band((uint64_t)llround(cur->freq_mhz * MHZ)) != cur->band) &&
+                (qso_log_freq_to_band((uint64_t)llround(cur->freq_mhz * KHZ)) == cur->band)) {
                 cur->freq_mhz /= 1000;      /* a log that wrote kHz */
             }
             count++;
@@ -305,10 +306,10 @@ int adif_read(const char * path, qso_log_record_t ** records, int *skipped) {
             cur->rstr = atoi(num);
         } else if (tag_is(&t, "BAND")) {
             tag_copy(&t, num, sizeof(num));
-            cur->band = str_to_band(num);
+            cur->band = qso_log_band_from_adif(num);
         } else if (tag_is(&t, "FREQ")) {
             tag_copy(&t, num, sizeof(num));
-            cur->freq_mhz = strtof(num, NULL);
+            cur->freq_mhz = strtod(num, NULL);
         } else if (tag_is(&t, "MY_GRIDSQUARE")) {
             COPY_STR(cur->local_grid, (char *)t.val, t.val_len);
         } else if (tag_is(&t, "GRIDSQUARE")) {
@@ -362,20 +363,17 @@ static void write_date_time(FILE *fd, time_t time) {
     fprintf(fd, "<TIME_OFF:4>%02i%02i", ts->tm_hour, ts->tm_min);
 }
 
-static void write_freq(FILE *fd, float freq_mhz) {
-    char str_freq[16];      /* "145.5000" is nine bytes with its terminator: eight overflowed (audit B03) */
-    snprintf(str_freq, sizeof(str_freq), "%0.4f", freq_mhz);
+static void write_freq(FILE *fd, double freq_mhz) {
+    char str_freq[32];
+    /* HF stays at 100 Hz, as the log has always written it. At 1 GHz and above
+     * the hertz matter: float used to lose about 1 kHz at 10 GHz, and "24048.100000"
+     * does not fit the old 16-byte buffer. */
+    snprintf(str_freq, sizeof(str_freq), freq_mhz >= 1000.0 ? "%.6f" : "%0.4f", freq_mhz);
     write_str(fd, "FREQ", str_freq);
 }
 
 static void write_band(FILE *fd, qso_log_band_t band) {
-    if (band == BAND_OTHER) {
-        write_str(fd, "BAND", "");
-    } else {
-        char str_band[16];
-        snprintf(str_band, sizeof(str_band), "%dM", band);
-        write_str(fd, "BAND", str_band);
-    }
+    write_str(fd, "BAND", qso_log_band_adif(band));
 }
 
 static void write_mode(FILE *fd, qso_log_mode_t mode) {
@@ -413,11 +411,6 @@ static char * extract_str(const char * src, size_t src_len) {
     dst[src_len] = 0;
     return dst;
 }
-
-static qso_log_band_t str_to_band(const char * s) {
-    return atoi(s);
-}
-
 
 static qso_log_mode_t create_mode(const char * mode, const char * submode) {
     if (!mode) return MODE_OTHER;

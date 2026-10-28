@@ -5,6 +5,8 @@
  *  under the frequency labels (SPOT_MARKS_H, 2 staggered rows), each joined
  *  by a line to its frequency (bottom of the spectrum, or top of the
  *  waterfall when the spectrum is off). Coloured by age.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -24,14 +26,14 @@ void spot_marks_init(lv_obj_t *parent, lv_coord_t line_y, lv_coord_t tag_y);
 void spot_marks_layout(lv_coord_t line_y, lv_coord_t tag_y);
 
 /* Span shown: center - half_width .. center + half_width */
-void spot_marks_update(int32_t center, int32_t half_width);
+void spot_marks_update(int64_t center, int32_t half_width);
 
 /* Drawn again (the birdies changed, or their setting) */
 void spot_marks_refresh(void);
 
 /* A spot drawn on the waterfall on the way from `from` (excluded) to `to`
  * (included), the nearest to `from`: the tuning snap (main_screen.c) */
-bool spot_marks_crossed(int32_t from, int32_t to, int32_t *spot_hz);
+bool spot_marks_crossed(int64_t from, int64_t to, int64_t *spot_hz);
 
 #ifdef __cplusplus
 }

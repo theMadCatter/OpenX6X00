@@ -40,6 +40,8 @@
  *   - follow: fold the AFC's pull into the centre frequency, so the
  *     loop never runs out of range on a drifting station. The transmit
  *     frequency moves with it, as it does in fldigi.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_psk.h"
@@ -605,7 +607,7 @@ static void rx_char_ui(void *data)
     const char *de = digi_qso_feed_rx(c);
     if (de && param_i_get(cfg_pskreporter))     /* no S/N figure in these modes: 0 dB */
         pskr_spot(params.callsign.x, station_qth(), VERSION, de, "",
-                  (uint32_t)cparam_i_get(cfg_fg_freq) + psk_tx_get_center(), 0, mode_name());
+                  cparam_hz_get(cfg_fg_freq) + psk_tx_get_center(), 0, mode_name());
     if (strcmp(before, digi_qso_dx()) != 0)
         refresh_btn(&btn_dx);
 }
@@ -973,7 +975,7 @@ static void apply_range(void)
 
 /* ---- Band selection --------------------------------------------------- */
 
-static int band_nearest(uint32_t freq)
+static int band_nearest(int64_t freq)
 {
     int best = 0;
     int64_t best_d = -1;
@@ -998,7 +1000,7 @@ static void load_band(int8_t dir)
     int idx;
 
     if (dir == 0 || cur_band < 0) {
-        idx = band_nearest((uint32_t)cparam_i_get(cfg_fg_freq));
+        idx = band_nearest(cparam_hz_get(cfg_fg_freq));
     } else {
         idx = cur_band + dir;
         if (idx < 0)
@@ -1012,7 +1014,7 @@ static void load_band(int8_t dir)
     refresh_btn(&btn_dial);
 
     /* Frequency first, then mode - the order cfg_digital_load() uses. */
-    cparam_i_set(cfg_fg_freq, (int32_t)psk_bands[idx].dial_hz);
+    cparam_hz_set(cfg_fg_freq, (int32_t)psk_bands[idx].dial_hz);
     cparam_i_set(cfg_cur_mode, radio_mode_usb_dig);
 
     msg_update_text_fmt("%s %s  %u.%03u MHz", mode_name(), psk_bands[idx].label,
@@ -1065,7 +1067,7 @@ static void dial_apply(void)
         return;
 
     f = (uint32_t)((int32_t)psk_bands[cur_band].dial_hz + dial_offset_hz);
-    cparam_i_set(cfg_fg_freq, (int32_t)f);
+    cparam_hz_set(cfg_fg_freq, (int32_t)f);
 
     /* What the waterfall and the averages hold belongs to the old dial.
      * The received text stays: it is still the same conversation. */

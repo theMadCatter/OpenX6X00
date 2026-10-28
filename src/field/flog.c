@@ -2,15 +2,19 @@
  *  SPDX-License-Identifier: LGPL-2.1-or-later
  *
  *  Xiegu X6100 LVGL GUI - Field Ops: the activation log
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #define _GNU_SOURCE
 
 #include "flog.h"
 #include "../board.h"
+#include "../xvtr.h"
 
 #include <ctype.h>
 #include <errno.h>
+#include <math.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,22 +24,9 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-static const struct {
-    int32_t     lo, hi;
-    const char *name;
-} bands[] = {
-    {1800000, 2000000, "160m"},   {3500000, 4000000, "80m"},    {5060000, 5450000, "60m"},
-    {7000000, 7300000, "40m"},    {10100000, 10150000, "30m"},  {14000000, 14350000, "20m"},
-    {18068000, 18168000, "17m"},  {21000000, 21450000, "15m"},  {24890000, 24990000, "12m"},
-    {28000000, 29700000, "10m"},  {50000000, 54000000, "6m"},   {144000000, 148000000, "2m"},
-    {430000000, 440000000, "70cm"},
-};
-
-const char *field_band(int32_t hz) {
-    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++)
-        if (hz >= bands[i].lo && hz <= bands[i].hi)
-            return bands[i].name;
-    return "";
+const char *field_band(int64_t hz) {
+    /* The same edges as the QSO log, including 3 cm and 1.25 cm. */
+    return xvtr_adif_band(hz);
 }
 
 static size_t field(char *buf, size_t size, size_t len, const char *tag, const char *val) {
@@ -236,7 +227,7 @@ int field_log_read(const char *path, field_qso_t *out, int max) {
         tm.tm_mon -= 1;
         q->t = timegm(&tm);
         get(line, "FREQ", v, sizeof(v));
-        q->freq_hz = (int32_t)(atof(v) * 1e6 + 0.5);
+        q->freq_hz = (int64_t)llround(atof(v) * 1e6);
         get(line, "MODE", q->mode, sizeof(q->mode));
         if (!strcasecmp(q->mode, "MFSK")) {       /* the submode names it: FT4, JS8, FT2 */
             char sub[8];

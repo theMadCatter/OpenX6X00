@@ -5,18 +5,21 @@
 // by SettingsManager); typed get/set arrive through cfg_api.h.
 //
 // Usage from C code:
-//   extern ComputedParamInt* cfg_fg_freq;   // filled by C++ side
-//   cparam_i_set(cfg_fg_freq, 7100000);
+//   extern ComputedParamHz* cfg_fg_freq;    // filled by C++ side
+//   cparam_hz_set(cfg_fg_freq, 7100000);
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include <stdint.h>
 
 #ifdef __cplusplus
 #include "computed_parameter.h"
 using ComputedParamInt   = ComputedParameter<int32_t>;
+using ComputedParamHz    = ComputedParameter<int64_t>;
 using ComputedParamFloat = ComputedParameter<float>;
 using ComputedParamText  = ComputedParameter<std::string>;
 #else
 typedef struct ComputedParamInt   ComputedParamInt;
+typedef struct ComputedParamHz    ComputedParamHz;
 typedef struct ComputedParamFloat ComputedParamFloat;
 typedef struct ComputedParamText  ComputedParamText;
 #endif
@@ -27,6 +30,9 @@ extern "C" {
 
 void    cparam_i_set(ComputedParamInt *p, int32_t value);
 int32_t cparam_i_get(const ComputedParamInt *p);
+
+void    cparam_hz_set(ComputedParamHz *p, int64_t value);
+int64_t cparam_hz_get(const ComputedParamHz *p);
 
 void  cparam_f_set(ComputedParamFloat *p, float value);
 float cparam_f_get(const ComputedParamFloat *p);

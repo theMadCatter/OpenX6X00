@@ -2,6 +2,8 @@
  *  SPDX-License-Identifier: GPL-3.0-or-later
  *
  *  Xiegu X6100 LVGL GUI - PSK Reporter upload
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "pskreporter.h"
@@ -244,11 +246,14 @@ static bool grid_ok(const char *g) {
 }
 
 void pskr_spot(const char *rcall, const char *rgrid, const char *version, const char *call, const char *grid,
-               uint32_t freq_hz, int snr, const char *mode) {
+               int64_t freq_hz, int snr, const char *mode) {
     if (!rcall[0] || strlen(rgrid) < 4 || !call_ok(call) || !strcasecmp(call, rcall)) return;
+    /* The on-wire frequency is uint32 Hz. Dropping the high bits would name another band. */
+    if (freq_hz < 0 || freq_hz > (int64_t)UINT32_MAX) return;
 
     time_t   now = time(NULL);
-    uint32_t mhz = freq_hz / 1000000;
+    uint32_t hz  = (uint32_t)freq_hz;
+    uint32_t mhz = hz / 1000000;
     bool     dup = false;
 
     pthread_mutex_lock(&mutex);
@@ -269,7 +274,7 @@ void pskr_spot(const char *rcall, const char *rgrid, const char *version, const 
         snprintf(s->call, sizeof(s->call), "%s", call);
         snprintf(s->grid, sizeof(s->grid), "%s", grid && grid_ok(grid) ? grid : "");
         snprintf(s->mode, sizeof(s->mode), "%s", mode);
-        s->freq_hz = freq_hz;
+        s->freq_hz = hz;
         s->snr     = snr < -128 ? -128 : snr > 127 ? 127 : snr;
         s->t       = (uint32_t)now;
     }

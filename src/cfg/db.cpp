@@ -8,6 +8,8 @@
  * common prefix per group. Indices are resolved once at Init via
  * sqlite3_bind_parameter_index() and reused on every bind, which avoids
  * per-call name lookups.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 #include "db.h"
 
@@ -227,8 +229,8 @@ BandInfoLoadResult BandsTable::get_by_id(int32_t band_id) {
         info.id                  = band_id;
         const unsigned char *txt = sqlite3_column_text(get_band_by_id_stmt_, 0);
         info.name                = txt ? reinterpret_cast<const char *>(txt) : "";
-        info.start_freq          = sqlite3_column_int(get_band_by_id_stmt_, 1);
-        info.stop_freq           = sqlite3_column_int(get_band_by_id_stmt_, 2);
+        info.start_freq          = sqlite3_column_int64(get_band_by_id_stmt_, 1);
+        info.stop_freq           = sqlite3_column_int64(get_band_by_id_stmt_, 2);
         info.type                = static_cast<band_type_t>(sqlite3_column_int(get_band_by_id_stmt_, 3));
         {
             std::lock_guard<std::mutex> cache_lock(last_band_mutex_);
@@ -240,7 +242,7 @@ BandInfoLoadResult BandsTable::get_by_id(int32_t band_id) {
     return {BandInfo{}, NOT_FOUND};
 }
 
-BandInfoLoadResult BandsTable::get_by_freq(uint32_t freq) {
+BandInfoLoadResult BandsTable::get_by_freq(int64_t freq) {
     {
         std::lock_guard<std::mutex> cache_lock(last_band_mutex_);
         if ((freq >= last_band.start_freq) && (freq <= last_band.stop_freq)) {
@@ -248,12 +250,12 @@ BandInfoLoadResult BandsTable::get_by_freq(uint32_t freq) {
         }
     }
 
-    LV_LOG_USER("Loading band info for freq: %u", freq);
+    LV_LOG_USER("Loading band info for freq: %lli", static_cast<long long>(freq));
     int            rc;
     StmtResetGuard guard(get_band_by_freq_mutex_, get_band_by_freq_stmt_);
-    rc = sqlite3_bind_int(get_band_by_freq_stmt_, get_band_by_freq_freq_param_index_, freq);
+    rc = sqlite3_bind_int64(get_band_by_freq_stmt_, get_band_by_freq_freq_param_index_, freq);
     if (rc != SQLITE_OK) {
-        LV_LOG_ERROR("Failed to bind freq %u: %s", freq, sqlite3_errmsg(db_));
+        LV_LOG_ERROR("Failed to bind freq %lli: %s", static_cast<long long>(freq), sqlite3_errmsg(db_));
         return {BandInfo{}, rc};
     }
     rc = sqlite3_step(get_band_by_freq_stmt_);
@@ -270,11 +272,13 @@ BandInfoLoadResult BandsTable::get_by_freq(uint32_t freq) {
             info.id   = BAND_UNDEFINED;
             info.type = BAND_INACTIVE;
         }
-        info.start_freq = sqlite3_column_int(get_band_by_freq_stmt_, 2);
+        info.start_freq = sqlite3_column_int64(get_band_by_freq_stmt_, 2);
         if (sqlite3_column_type(get_band_by_freq_stmt_, 3) == SQLITE_NULL) {
-            info.stop_freq = 0xFFFFFFFFU;
+            /* Above every band. A 32-bit sentinel (0xFFFFFFFF) ends at 4.29 GHz
+             * and would drop 10 GHz and 24 GHz out of the gap. */
+            info.stop_freq = INT64_C(0x7fffffffffffffff);
         } else {
-            info.stop_freq = sqlite3_column_int(get_band_by_freq_stmt_, 3);
+            info.stop_freq = sqlite3_column_int64(get_band_by_freq_stmt_, 3);
         }
         {
             std::lock_guard<std::mutex> cache_lock(last_band_mutex_);
@@ -282,11 +286,11 @@ BandInfoLoadResult BandsTable::get_by_freq(uint32_t freq) {
         }
         return {info, SUCCESS};
     }
-    LV_LOG_WARN("No band info for freq: %u", freq);
+    LV_LOG_WARN("No band info for freq: %lli", static_cast<long long>(freq));
     return {BandInfo{}, NOT_FOUND};
 }
 
-BandInfoLoadResult BandsTable::next(int32_t cur_band_id, uint32_t cur_freq, bool up) {
+BandInfoLoadResult BandsTable::next(int32_t cur_band_id, int64_t cur_freq, bool up) {
     int           rc;
     sqlite3_stmt *stmt;
     std::mutex   *mux;
@@ -305,9 +309,10 @@ BandInfoLoadResult BandsTable::next(int32_t cur_band_id, uint32_t cur_freq, bool
 
     StmtResetGuard guard(*mux, stmt);
 
-    rc = sqlite3_bind_int(stmt, freq_idx, cur_freq);
+    rc = sqlite3_bind_int64(stmt, freq_idx, cur_freq);
     if (rc != SQLITE_OK) {
-        LV_LOG_ERROR("Failed to bind freq %u to find up/down stmt: %s", cur_freq, sqlite3_errmsg(db_));
+        LV_LOG_ERROR("Failed to bind freq %lli to find up/down stmt: %s", static_cast<long long>(cur_freq),
+                     sqlite3_errmsg(db_));
         return {BandInfo{}, rc};
     }
     rc = sqlite3_bind_int(stmt, band_idx, cur_band_id);
@@ -322,15 +327,16 @@ BandInfoLoadResult BandsTable::next(int32_t cur_band_id, uint32_t cur_freq, bool
         const unsigned char *txt = sqlite3_column_text(stmt, 1);
         info.name                = txt ? reinterpret_cast<const char *>(txt) : "";
         info.type                = BAND_ACTIVE;
-        info.start_freq          = sqlite3_column_int(stmt, 2);
-        info.stop_freq           = sqlite3_column_int(stmt, 3);
+        info.start_freq          = sqlite3_column_int64(stmt, 2);
+        info.stop_freq           = sqlite3_column_int64(stmt, 3);
         {
             std::lock_guard<std::mutex> cache_lock(last_band_mutex_);
             last_band = info;
         }
         return {info, SUCCESS};
     }
-    LV_LOG_INFO("No next band info for freq: %u, cur_id: %i and direction: %i", cur_freq, cur_band_id, up);
+    LV_LOG_INFO("No next band info for freq: %lli, cur_id: %i and direction: %i", static_cast<long long>(cur_freq),
+                cur_band_id, up);
     return {BandInfo{}, NOT_FOUND};
 }
 
@@ -346,8 +352,8 @@ std::vector<BandInfo> BandsTable::all_bands() {
             info.id                  = sqlite3_column_int(read_all_bands_stmt_, 0);
             const unsigned char *txt = sqlite3_column_text(read_all_bands_stmt_, 1);
             info.name                = txt ? reinterpret_cast<const char *>(txt) : "";
-            info.start_freq          = sqlite3_column_int(read_all_bands_stmt_, 2);
-            info.stop_freq           = sqlite3_column_int(read_all_bands_stmt_, 3);
+            info.start_freq          = sqlite3_column_int64(read_all_bands_stmt_, 2);
+            info.stop_freq           = sqlite3_column_int64(read_all_bands_stmt_, 3);
             info.type                = static_cast<band_type_t>(sqlite3_column_int(read_all_bands_stmt_, 4));
             result.push_back(info);
         } else if (rc == SQLITE_DONE) {
@@ -602,7 +608,7 @@ void MemoryTable::Shutdown() {
     db_                    = nullptr;
 }
 
-int MemoryTable::Save(int32_t id, const char *name, int32_t value) {
+int MemoryTable::Save(int32_t id, const char *name, int64_t value) {
     int            rc;
     StmtResetGuard guard(save_mutex_, save_stmt_);
 
@@ -616,9 +622,9 @@ int MemoryTable::Save(int32_t id, const char *name, int32_t value) {
         LV_LOG_ERROR("Failed to bind mem name %s: %s", name, sqlite3_errmsg(db_));
         return rc;
     }
-    rc = sqlite3_bind_int(save_stmt_, save_val_param_index_, value);
+    rc = sqlite3_bind_int64(save_stmt_, save_val_param_index_, value);
     if (rc != SQLITE_OK) {
-        LV_LOG_ERROR("Failed to bind mem val %i: %s", value, sqlite3_errmsg(db_));
+        LV_LOG_ERROR("Failed to bind mem val %lli: %s", static_cast<long long>(value), sqlite3_errmsg(db_));
         return rc;
     }
     rc = sqlite3_step(save_stmt_);
@@ -629,7 +635,7 @@ int MemoryTable::Save(int32_t id, const char *name, int32_t value) {
     return SUCCESS;
 }
 
-bool MemoryTable::Load(int32_t id, int32_t &freq, bool &has_freq, int32_t &mode, bool &has_mode, int32_t &agc,
+bool MemoryTable::Load(int32_t id, int64_t &freq, bool &has_freq, int32_t &mode, bool &has_mode, int32_t &agc,
                        bool &has_agc, int32_t &att, bool &has_att, int32_t &pre, bool &has_pre) {
     freq     = 0;
     mode     = 0;
@@ -655,7 +661,7 @@ bool MemoryTable::Load(int32_t id, int32_t &freq, bool &has_freq, int32_t &mode,
         if (rc == SQLITE_ROW) {
             const unsigned char *name_txt = sqlite3_column_text(load_stmt_, 0);
             const char          *name     = name_txt ? reinterpret_cast<const char *>(name_txt) : "";
-            const int32_t        val      = sqlite3_column_int(load_stmt_, 1);
+            const int64_t        val      = sqlite3_column_int64(load_stmt_, 1);
             if (strcmp(name, "vfoa_freq") == 0) {
                 freq     = val;
                 has_freq = true;

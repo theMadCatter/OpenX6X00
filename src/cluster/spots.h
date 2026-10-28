@@ -3,6 +3,8 @@
  *
  *  DX cluster spots: line parser, spot store, band and mode helpers.
  *  No LVGL and no network here, so it can be unit tested on a PC.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -20,7 +22,7 @@ extern "C" {
 #define CLUSTER_MAX_SPOTS   300
 
 typedef struct {
-    int32_t  freq_hz;
+    int64_t  freq_hz; /* true RF. 10 GHz does not fit in 32 bits */
     char     dx[CLUSTER_CALL_LEN];
     char     spotter[CLUSTER_CALL_LEN];
     char     comment[CLUSTER_COMMENT_LEN];
@@ -58,7 +60,7 @@ void cluster_store_expire(cluster_store_t *s, uint16_t now_utc_min, uint16_t max
 uint16_t cluster_age_min(uint16_t spot_utc_min, uint16_t now_utc_min);
 
 /* Amateur band index of a frequency, or -1 outside the bands. */
-int         cluster_band_of(int32_t hz);
+int         cluster_band_of(int64_t hz);
 const char *cluster_band_name(int band);
 
 /* Mode to tune a spot with: from its comment (CW, FT8, SSB, ...), else

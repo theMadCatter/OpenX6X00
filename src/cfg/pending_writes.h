@@ -46,6 +46,7 @@ class PendingWrites : public WriteSink {
         : policy_resolver_(std::move(resolver)) {}
 
     void write(const StorageKey &key, int32_t value) override;
+    void write(const StorageKey &key, int64_t value) override;
     void write(const StorageKey &key, float value) override;
     void write(const StorageKey &key, const std::string &value) override;
 
@@ -67,6 +68,7 @@ class PendingWrites : public WriteSink {
     std::function<StoragePolicy &(StorageType)> policy_resolver_;
 
     std::unordered_map<StorageKey, int32_t, StorageKeyHash>     pending_ints_;
+    std::unordered_map<StorageKey, int64_t, StorageKeyHash>     pending_i64_;
     std::unordered_map<StorageKey, float, StorageKeyHash>       pending_floats_;
     std::unordered_map<StorageKey, std::string, StorageKeyHash> pending_texts_;
     mutable std::mutex                                          mutex_;

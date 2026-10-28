@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -30,7 +31,9 @@ extern "C" {
 uint64_t get_time();
 void get_time_str(char *str, size_t str_size);
 
-void split_freq(int32_t freq, uint16_t *mhz, uint16_t *khz, uint16_t *hz);
+/* mhz saturates at 65535 (about 65 GHz). 24 GHz is 24000 and fits. */
+void split_freq(int64_t freq, uint16_t *mhz, uint16_t *khz, uint16_t *hz);
+int64_t align_i64(int64_t x, int32_t step);
 int32_t align_int(int32_t x, uint16_t step);
 int32_t limit(int32_t x, int32_t min, int32_t max);
 float sqr(float x);

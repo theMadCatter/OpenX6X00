@@ -4,6 +4,7 @@
 // receive only) on the same demodulator
 //
 // Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "navtex_window.h"
 #include "board.h"
@@ -140,7 +141,7 @@ static const freq_list_item_t *mode_freqs(int *n)
 static void short_label(void)
 {
     int n;
-    int32_t dial = 0, vfo = cparam_i_get(cfg_fg_freq);
+    int32_t dial = 0, vfo = cparam_hz_get(cfg_fg_freq);
     const freq_list_item_t *list = mode_freqs(&n);
     const freq_list_item_t *it = freq_list_base(list, n, 1000, vfo, &dial);
 
@@ -235,7 +236,7 @@ static void bit_cb(int mark, void *userdata)
 static void header_update(void)
 {
     char         l[80];
-    int32_t      f = cparam_i_get(cfg_fg_freq) + 1000;     /* USB, decoder centred on 1000 Hz */
+    int32_t      f = cparam_hz_get(cfg_fg_freq) + 1000;     /* USB, decoder centred on 1000 Hz */
     const char  *name = dsc_mode ? "DSC" : "NAVTEX", *note = NULL;
 
     for (size_t i = 0; i < sizeof(navtex_freqs) / sizeof(navtex_freqs[0]); i++) {
@@ -457,7 +458,7 @@ static void ui_timer_cb(lv_timer_t *t)
         char   hms[16];
         strftime(hms, sizeof(hms), "%H:%M:%S", gmtime(&now));
         for (int i = 0; i < ncalls; i++)
-            dsc_add_row(&calls[i], hms, cparam_i_get(cfg_fg_freq) + 1000);
+            dsc_add_row(&calls[i], hms, cparam_hz_get(cfg_fg_freq) + 1000);
     }
     if (nchars) {
         text_add(chars, nchars);
@@ -673,8 +674,8 @@ static void mode_set(bool dsc)
         return;
     freq_list_close();
     list = mode_freqs(&n);
-    freq_list_base(list, n, 1000, cparam_i_get(cfg_fg_freq), &dial);
-    bool on_channel = dial == cparam_i_get(cfg_fg_freq);
+    freq_list_base(list, n, 1000, cparam_hz_get(cfg_fg_freq), &dial);
+    bool on_channel = dial == cparam_hz_get(cfg_fg_freq);
 
     dsc_mode = dsc;
     dsc_reset = true;

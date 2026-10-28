@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "app_window.h"
@@ -71,7 +72,7 @@ void app_mem_save(const char *name) {
     for (int i = 0; i < n; i++) {
         fprintf(f, "%s\n", keep[i]);
     }
-    fprintf(f, "%s %d %d\n", name, (int)cparam_i_get(cfg_fg_freq), (int)cparam_i_get(cfg_cur_mode));
+    fprintf(f, "%s %d %d\n", name, (int)cparam_hz_get(cfg_fg_freq), (int)cparam_i_get(cfg_cur_mode));
     fclose(f);
     rename(APP_FREQS ".tmp", APP_FREQS);
 }

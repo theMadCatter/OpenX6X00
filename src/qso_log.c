@@ -4,10 +4,12 @@
  *  Xiegu X6100 LVGL GUI - the QSO log in SQLite (qso_log.h)
  *
  *  Copyright (c) 2026 Giovanni Ricciardi IU1WXY, own code of the IU1WXY firmware
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "qso_log.h"
 #include "board.h"
+#include "xvtr.h"
 
 #include "util.h"
 #include "msg.h"
@@ -20,6 +22,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #define LOG_DB  BOARD_DATA "/qso_log.db"
@@ -54,12 +57,15 @@ static const char *schema[] = {
 static sqlite3      *db;
 static sqlite3_stmt *worked_stmt;
 
-/* The bands as the log stores them, edges in kHz */
-static const struct { uint32_t lo, hi; qso_log_band_t band; } bands[] = {
-    {1800, 2000, BAND_160M},    {3500, 4000, BAND_80M},     {5351, 5367, BAND_60M},
-    {7000, 7300, BAND_40M},     {10100, 10150, BAND_30M},   {14000, 14350, BAND_20M},
-    {18068, 18168, BAND_17M},   {21000, 21450, BAND_15M},   {24890, 24990, BAND_12M},
-    {28000, 29700, BAND_10M},   {50000, 54000, BAND_6M},
+/* ADIF name of each stored band. The numbers stay stable for qso_log.db.
+ * "6cm" is BAND_6CM (600), never BAND_6M. */
+static const struct { qso_log_band_t band; const char *name; } band_names[] = {
+    {BAND_160M, "160m"}, {BAND_80M, "80m"}, {BAND_60M, "60m"}, {BAND_40M, "40m"},
+    {BAND_30M, "30m"}, {BAND_20M, "20m"}, {BAND_17M, "17m"}, {BAND_15M, "15m"},
+    {BAND_12M, "12m"}, {BAND_10M, "10m"}, {BAND_6M, "6m"}, {BAND_4M, "4m"},
+    {BAND_2M, "2m"}, {BAND_125M, "1.25m"}, {BAND_70CM, "70cm"}, {BAND_33CM, "33cm"},
+    {BAND_23CM, "23cm"}, {BAND_13CM, "13cm"}, {BAND_9CM, "9cm"}, {BAND_6CM, "6cm"},
+    {BAND_3CM, "3cm"}, {BAND_125CM, "1.25cm"},
 };
 
 bool qso_log_init() {
@@ -79,12 +85,22 @@ bool qso_log_init() {
     return true;
 }
 
-qso_log_band_t qso_log_freq_to_band(uint64_t freq_hz) {
-    uint32_t khz = freq_hz / 1000;      /* 32 bits, as the log always took it */
+const char *qso_log_band_adif(qso_log_band_t band) {
+    for (size_t i = 0; i < sizeof(band_names) / sizeof(band_names[0]); i++)
+        if (band_names[i].band == band) return band_names[i].name;
+    return "";
+}
 
-    for (size_t i = 0; i < sizeof(bands) / sizeof(bands[0]); i++)
-        if (khz >= bands[i].lo && khz <= bands[i].hi) return bands[i].band;
+qso_log_band_t qso_log_band_from_adif(const char *s) {
+    if (!s || !*s) return BAND_OTHER;
+    for (size_t i = 0; i < sizeof(band_names) / sizeof(band_names[0]); i++)
+        if (strcasecmp(s, band_names[i].name) == 0) return band_names[i].band;
     return BAND_OTHER;
+}
+
+qso_log_band_t qso_log_freq_to_band(uint64_t freq_hz) {
+    /* One edge table (xvtr.c), shared with the ADIF writer. */
+    return qso_log_band_from_adif(xvtr_adif_band((int64_t)freq_hz));
 }
 
 static void copy_field(char *dst, size_t size, const char *src) {
@@ -101,7 +117,7 @@ qso_log_record_t qso_log_record_create(const char *local_call, const char *remot
         .mode = mode,
         .rsts = rsts,
         .rstr = rstr,
-        .freq_mhz = (float) freq_hz / 1000000,
+        .freq_mhz = (double) freq_hz / 1000000.0,
         .band = qso_log_freq_to_band(freq_hz),
     };
 

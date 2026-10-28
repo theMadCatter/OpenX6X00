@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 #include "util.h"
 #include "util.hpp"
@@ -46,10 +47,22 @@ void get_time_str(char *str, size_t str_size) {
     snprintf(str, str_size, "%04i-%02i-%02i %02i-%02i-%02i", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
 }
 
-void split_freq(int32_t freq, uint16_t *mhz, uint16_t *khz, uint16_t *hz) {
-    *mhz = freq / 1'000'000;
-    *khz = (freq / 1'000) % 1'000;
-    *hz = freq % 1'000;
+void split_freq(int64_t freq, uint16_t *mhz, uint16_t *khz, uint16_t *hz) {
+    if (freq < 0) {
+        freq = 0;
+    }
+    int64_t m = freq / 1'000'000;
+    if (m > 65535) {
+        m = 65535;
+    }
+    *mhz = static_cast<uint16_t>(m);
+    *khz = static_cast<uint16_t>((freq / 1'000) % 1'000);
+    *hz  = static_cast<uint16_t>(freq % 1'000);
+}
+
+int64_t align_i64(int64_t x, int32_t step) {
+    int64_t s = step < 0 ? -static_cast<int64_t>(step) : step;
+    return align(x, s);
 }
 
 int32_t align_int(int32_t x, uint16_t step) {

@@ -13,6 +13,7 @@
 // is returned to the caller — PendingWrites can then decide whether to keep the
 // pending entry for a later retry. Load returns std::nullopt on NOT_FOUND /
 // error so the Parameter keeps its current value.
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "storage_policy.h"
 
@@ -127,6 +128,22 @@ int BandStorage::save_int(int context_id, const char *name, int32_t value) {
 
 std::optional<int32_t> BandStorage::load_int(int context_id, const char *name) {
     ParamLoadResult<int32_t> res = BandParamsTable::Load<int32_t>(context_id, name);
+    if (res.rc == SUCCESS) {
+        return res.value;
+    }
+    return std::nullopt;
+}
+
+int BandStorage::save_i64(int context_id, const char *name, int64_t value) {
+    int rc = BandParamsTable::Save<int64_t>(context_id, name, value);
+    if (rc != SUCCESS) {
+        return log_save_error("BandParamsTable::Save<int64_t>", rc);
+    }
+    return SUCCESS;
+}
+
+std::optional<int64_t> BandStorage::load_i64(int context_id, const char *name) {
+    ParamLoadResult<int64_t> res = BandParamsTable::Load<int64_t>(context_id, name);
     if (res.rc == SUCCESS) {
         return res.value;
     }

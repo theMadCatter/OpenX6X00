@@ -8,6 +8,8 @@
  *  locator, software) and one record per station heard. Spots are queued
  *  and sent in batches every ~5 minutes from a background thread; each call
  *  is reported once per band in 5 minutes.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -36,8 +38,10 @@ size_t pskr_packet(uint8_t *buf, size_t size, const char *rcall, const char *rgr
 
 /* Queues a station heard (never blocks). rgrid is cut to 4 characters; version is
  * main.h's VERSION. Our own call is skipped. */
+/* freq_hz is the dial plus the audio offset. The IPFIX frequency field is 32 bits, so a
+ * frequency above 4294967295 Hz is not queued (it would be reported as a different band). */
 void pskr_spot(const char *rcall, const char *rgrid, const char *version, const char *call, const char *grid,
-               uint32_t freq_hz, int snr, const char *mode);
+               int64_t freq_hz, int snr, const char *mode);
 
 #ifdef __cplusplus
 }

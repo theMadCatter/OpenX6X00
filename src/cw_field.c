@@ -3,6 +3,8 @@
  *
  *  CW from the keyboard on the main screen (see cw_field.h). Lines typed while
  *  sending wait in a queue, as in the CW keyboard app; the field hides when all is sent.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "cw_field.h"
@@ -47,7 +49,7 @@ static char      done[LINE_MAX + 1];   /* Live: the line keyed so far, until Ent
 static bool can_send(void) {
     int32_t m = cparam_i_get(cfg_cur_mode);
 
-    return (m == radio_mode_cw || m == radio_mode_cwr) && band_plan_is_cw(cparam_i_get(cfg_fg_freq)) &&
+    return (m == radio_mode_cw || m == radio_mode_cwr) && band_plan_is_cw(cparam_hz_get(cfg_fg_freq)) &&
            !dialog_is_run();
 }
 

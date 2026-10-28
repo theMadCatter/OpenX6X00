@@ -10,6 +10,8 @@
  *  knob still tunes. The network jobs (reference list update, POTA/WWBOTA/HOTA/WWFF spot, QRZ upload) run
  *  x6100-field in a thread; its one-line answer comes back through the scheduler.
  *  What differs between the programmes is in progs[], nowhere else.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_field.h"
@@ -369,7 +371,7 @@ static bool ref_text_ok(const char *r) {
 static const char *digi_mode(void) {
     static const int ft8[] = {1840, 3573, 5357, 7074, 10136, 14074, 18100, 21074, 24915, 28074, 50313};
     static const int ft4[] = {3575, 7047, 10140, 14080, 18104, 21140, 24919, 28180, 50318};
-    int32_t          hz    = cparam_i_get(cfg_fg_freq);
+    int64_t          hz    = cparam_hz_get(cfg_fg_freq);
 
     for (size_t i = 0; i < sizeof(ft8) / sizeof(ft8[0]); i++)
         if (hz >= ft8[i] * 1000 - 500 && hz <= ft8[i] * 1000 + 3500)
@@ -1282,7 +1284,7 @@ static void build_ref(void) {
 
 static void act_update(void) {
     char buf[64];
-    int  hz = cparam_i_get(cfg_fg_freq);
+    int  hz = cparam_hz_get(cfg_fg_freq);
 
     if (!act_freq)
         return;
@@ -1446,7 +1448,7 @@ static void build_bands(void) {
                       "Skimmer data: Reverse Beacon Network (reversebeacon.net)");
     list_head("BAND\tACTIVITY\t\tSPOTS\tRBN\tHEARD YOU\t", 13, 6);
     lv_obj_set_style_text_font(list, VF(22), 0);
-    sel = field_band_of(cparam_i_get(cfg_fg_freq));
+    sel = field_band_of(cparam_hz_get(cfg_fg_freq));
     bands_fill();
     buttons_load_page(&page_bands);
 }
@@ -1629,7 +1631,7 @@ static bool wwff_key(void) {
 /* The spot on the program's site (POTA, WWBOTA, HOTA, WWFF); qrt: the activation ended. False for a programme
  * with no site of its own (progs[].site) */
 static bool spot_job(bool qrt) {
-    double      khz = cparam_i_get(cfg_fg_freq) / 1000.0;
+    double      khz = cparam_hz_get(cfg_fg_freq) / 1000.0;
     const char *m   = adif_mode();
     const char *cmd = st.ref.type == 'P' ? "pota-spot" : st.ref.type == 'H' ? "hota-spot" : st.ref.type == 'F' ? "wwff-spot" : NULL;
 
@@ -1650,7 +1652,7 @@ static void qsy_cb(lv_timer_t *t) {
     if (!st.active || !prog_of(st.ref.type)->site || !qsy.spot_at) {
         return;
     }
-    moved = abs(cparam_i_get(cfg_fg_freq) - spot_hz) >= 1000 || strcmp(adif_mode(), spot_mode);
+    moved = abs(cparam_hz_get(cfg_fg_freq) - spot_hz) >= 1000 || strcmp(adif_mode(), spot_mode);
     /* ponytail: TX polled every 500 ms, a shorter transmission is missed */
     if (field_qsy_step(&qsy, param_i_get(cfg_field_respot), moved, radio_get_state() == RADIO_TX, time(NULL))
         && !atomic_load(&busy)) {
@@ -1763,21 +1765,21 @@ static void spot_to(bool cluster) {
         const char *p = prog_name_of(st.ref.type);
         snprintf(comment, sizeof(comment), "%s %s %s", prog_of(st.ref.type)->spot ? prog_of(st.ref.type)->spot : p,
                  st.ref.ref, adif_mode());
-        if (cluster_client_send_spot(cparam_i_get(cfg_fg_freq) / 1000.0, my_call(), comment))
+        if (cluster_client_send_spot(cparam_hz_get(cfg_fg_freq) / 1000.0, my_call(), comment))
             msg_update_text_fmt("%s spot on the DX clusters: %s %.1f %s", p, st.ref.ref,
-                                cparam_i_get(cfg_fg_freq) / 1000.0, adif_mode());
+                                cparam_hz_get(cfg_fg_freq) / 1000.0, adif_mode());
         else
             msg_update_text_fmt("DX cluster not running: no %s spot", p);
         return;
     }
     char        comment[48];
     const char *p = prog_name_of(st.ref.type);
-    spot_hz = cparam_i_get(cfg_fg_freq);
+    spot_hz = cparam_hz_get(cfg_fg_freq);
     snprintf(spot_mode, sizeof(spot_mode), "%s", adif_mode());
     qsy.spot_at = time(NULL);
     snprintf(comment, sizeof(comment), "%s %s %s", p, st.ref.ref, adif_mode());
     if (cluster)
-        cluster_client_send_spot(cparam_i_get(cfg_fg_freq) / 1000.0, my_call(), comment);   /* the DX clusters too */
+        cluster_client_send_spot(cparam_hz_get(cfg_fg_freq) / 1000.0, my_call(), comment);   /* the DX clusters too */
     if ((st.ref.type == 'H' && !hota_key()) || (st.ref.type == 'F' && !wwff_key())) {
         /* cqhota.app and the WWFF Spotline take spots with the activator's own key only */
         msg_update_text_fmt(cluster ? "%s spot on the DX clusters only: no %s key (web page, Field Ops)"
@@ -1785,7 +1787,7 @@ static void spot_to(bool cluster) {
         return;
     }
     if (spot_job(false))
-        msg_update_text_fmt("%s spot: %s %.1f %s...", p, st.ref.ref, cparam_i_get(cfg_fg_freq) / 1000.0, adif_mode());
+        msg_update_text_fmt("%s spot: %s %.1f %s...", p, st.ref.ref, cparam_hz_get(cfg_fg_freq) / 1000.0, adif_mode());
 }
 
 static void spot(void) {
@@ -1798,7 +1800,7 @@ static void spot_cb(button_data_t *b) {
         spot_armed_at = time(NULL);
         buttons_refresh(&b_spot);
         msg_update_text_fmt("Press Spot again to post %s %.1f %s", st.have_ref ? st.ref.ref : "",
-                            cparam_i_get(cfg_fg_freq) / 1000.0, adif_mode());
+                            cparam_hz_get(cfg_fg_freq) / 1000.0, adif_mode());
         return;
     }
     spot_armed = false;
@@ -1868,7 +1870,7 @@ static bool day_log_add(const field_qso_t *q, const char *me) {
 
 /* The phone's logger outside Field Ops (QSOs in voice and so on): the day's log, on the radio's frequency and mode */
 bool dialog_field_qso_log(const char *text) {
-    field_qso_t     q   = {.t = time(NULL), .freq_hz = cparam_i_get(cfg_fg_freq)};
+    field_qso_t     q   = {.t = time(NULL), .freq_hz = cparam_hz_get(cfg_fg_freq)};
     const char     *rst = is_cw() ? "599" : "59";
     char            call[32] = "", rs[8] = "", rr[8] = "";
 
@@ -1912,7 +1914,7 @@ void dialog_field_day_log(const qso_log_record_t *r) {
 /* A QSO in the log: false when the call is not a callsign */
 /* more: name, QTH, grid and country of the other station (the phone's QRZ lookup), or NULL */
 static bool log_add(const char *call_in, const char *rst_s, const char *rst_r, const field_qso_t *more) {
-    field_qso_t     q   = {.t = time(NULL), .freq_hz = cparam_i_get(cfg_fg_freq)};
+    field_qso_t     q   = {.t = time(NULL), .freq_hz = cparam_hz_get(cfg_fg_freq)};
     field_station_t sta;
     const char     *rst = is_cw() ? "599" : "59";
     char            call[32];

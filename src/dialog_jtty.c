@@ -19,6 +19,8 @@
  *  sends it; a line sent while another is on the air follows it without a
  *  gap. F1-F8 are macros, by default the WSJT-X JTTY function keys (CQ %M CQ, %H %E, ...),
  *  packed with the contest exchange forms, so "599 001" takes one frame.
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_jtty.h"
@@ -387,7 +389,7 @@ static void rx_msg_ui(void *data)
     if (m->complete && m->call[0] && (m->call_kind == JTTY_CALL_CQ || m->call_kind == JTTY_CALL_TU_CQ) &&
         param_i_get(cfg_pskreporter))
         pskr_spot(params.callsign.x, station_qth(), VERSION, m->call, "",
-                  (uint32_t)cparam_i_get(cfg_fg_freq) + (uint32_t)lroundf(m->freq), m->snr, "JTTY");
+                  cparam_hz_get(cfg_fg_freq) + (int64_t)lroundf(m->freq), m->snr, "JTTY");
 
     /* The DX call: a station calling CQ, or calling us, on our frequency */
     if (!win)
@@ -498,7 +500,7 @@ static void load_band(int8_t dir)
     int idx = 0;
 
     if (dir == 0 || cur_band < 0) {
-        int64_t best = -1, f = cparam_i_get(cfg_fg_freq);
+        int64_t best = -1, f = cparam_hz_get(cfg_fg_freq);
         for (int i = 0; i < BAND_CNT; i++) {
             int64_t d = llabs(f - (int64_t)bands[i].dial_hz);
             if (best < 0 || d < best) {
@@ -512,7 +514,7 @@ static void load_band(int8_t dir)
     cur_band = idx;
     dial_offset_hz = 0;
     refresh_btn(&btn_dial);
-    cparam_i_set(cfg_fg_freq, (int32_t)bands[idx].dial_hz);
+    cparam_hz_set(cfg_fg_freq, (int32_t)bands[idx].dial_hz);
     cparam_i_set(cfg_cur_mode, radio_mode_usb_dig);
     msg_update_text_fmt("JTTY %s  %u.%03u MHz", bands[idx].label, (unsigned)(bands[idx].dial_hz / 1000000u),
                         (unsigned)((bands[idx].dial_hz / 1000u) % 1000u));
@@ -540,7 +542,7 @@ static void dial_apply(void)
     if (cur_band < 0)
         return;
     f = (uint32_t)((int32_t)bands[cur_band].dial_hz + dial_offset_hz);
-    cparam_i_set(cfg_fg_freq, (int32_t)f);
+    cparam_hz_set(cfg_fg_freq, (int32_t)f);
     lv_waterfall_clear_data(waterfall);
     jtty_rx_reset();
     msg_update_text_fmt("JTTY %s  %u.%03u MHz", bands[cur_band].label, (unsigned)(f / 1000000u),

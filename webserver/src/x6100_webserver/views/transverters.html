@@ -1,0 +1,96 @@
+% rebase("base.html", title="Transverters")
+<h2><svg class="i"><use href="#i-wave"/></svg>Transverters</h2>
+<p class="sub">Twelve transverters. The dial, the band keys and the log stay on the true RF frequency; the radio is sent the IF
+(100 kHz to 55 MHz). A low-side LO mixes as RF = LO + IF. A high-side LO mixes as RF = LO − IF and the radio swaps the
+sideband (LSB with USB, CW with CW-R) while the mode on the screen stays the one you set. Drive 0 leaves the radio's
+own power; any other value is the most it will send into that transverter, in watts. RX only never transmits.
+The radio has no band-data or accessory output for switching a transverter: WiFi, the backlight, USB-CAT, the Morse
+key and the baseband reset are the pins it drives, and the X6200 HOST port is the WR12 receiver.</p>
+
+<section class="dp-card">
+<div class="dp-head"><span class="dp-ico"><svg class="i"><use href="#i-wave"/></svg></span><div><h3>Transverter list</h3><p>Name, RF range, LO, calibration, high-side LO, enable, RX only, drive cap. Whole hertz. On the radio the same page is whole megahertz, and the calibration is kilohertz.</p></div><div class="dp-x"><button id="save" class="primary">Save</button></div></div>
+<div class="dp-body tbl">
+<p class="sub" id="note" hidden></p>
+<div class="table-wrap">
+<table id="xvtr_list">
+  <thead><tr>
+    <th></th><th>Name</th><th>On</th><th>RX</th><th>High LO</th>
+    <th class="freq">From, MHz</th><th class="freq">To, MHz</th><th class="freq">LO, MHz</th>
+    <th class="freq">Cal, kHz</th><th class="freq">Drive, W</th>
+  </tr></thead>
+  <tbody></tbody>
+</table>
+</div>
+<div class="actions"><span class="status" id="status"></span></div>
+</div>
+</section>
+
+<script>
+/* Hz in the table, MHz and kHz on the page. 24 GHz still fits a JS number exactly. */
+function mhzText(hz) {
+  if (!hz) return "";
+  const s = (hz / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "");
+  return s;
+}
+
+function rowOf(i, s) {
+  const tr = $("<tr>");
+  tr.append($("<td>").text(i + 1));
+  tr.append($("<td>").append($("<input type='text' maxlength='15'>").val(s.name || "")));
+  tr.append($("<td>").append($("<input type='checkbox' class='on'>").prop("checked", !!s.enabled)));
+  tr.append($("<td>").append($("<input type='checkbox' class='rx'>").prop("checked", !!s.rx_only)));
+  tr.append($("<td>").append($("<input type='checkbox' class='hi'>").prop("checked", !!s.high)));
+  tr.append($("<td class='freq_cell'>").append($("<input type='number' step='0.000001' min='0' max='30000'>").val(mhzText(s.rf_from))));
+  tr.append($("<td class='freq_cell'>").append($("<input type='number' step='0.000001' min='0' max='30000'>").val(mhzText(s.rf_to))));
+  tr.append($("<td class='freq_cell'>").append($("<input type='number' step='0.000001' min='0' max='30000'>").val(mhzText(s.lo))));
+  tr.append($("<td class='freq_cell'>").append($("<input type='number' step='1' min='-10000' max='10000'>").val(Math.round((s.cal || 0) / 1000))));
+  tr.append($("<td class='freq_cell'>").append($("<input type='number' step='0.1' min='0' max='10'>").val(((s.pwr || 0) / 10).toFixed(1))));
+  return tr;
+}
+
+function readRow(tr, i) {
+  const inp = tr.find("input");
+  const mhz = n => Math.round(Number(inp.eq(n).val()) * 1e6);
+  return {
+    name: inp.eq(0).val(),
+    enabled: inp.eq(1).prop("checked") ? 1 : 0,
+    rx_only: inp.eq(2).prop("checked") ? 1 : 0,
+    high: inp.eq(3).prop("checked") ? 1 : 0,
+    rf_from: mhz(4),
+    rf_to: mhz(5),
+    lo: mhz(6),
+    cal: Math.round(Number(inp.eq(7).val()) * 1000),
+    pwr: Math.round(Number(inp.eq(8).val()) * 10)
+  };
+}
+
+function show(slots) {
+  const body = $("#xvtr_list tbody").empty();
+  slots.forEach((s, i) => body.append(rowOf(i, s)));
+}
+
+function load() {
+  $.getJSON("/api/transverters")
+    .done(r => {
+      show(r.slots || []);
+      if (r.note) $("#note").text(r.note).prop("hidden", false);
+    })
+    .fail((xhr, why) => $("#status").text(x6100FailText(xhr, why)));
+}
+
+$("#save").on("click", function() {
+  const slots = $("#xvtr_list tbody tr").map((i, tr) => readRow($(tr), i)).get();
+  $("#status").text("Saving...");
+  $.ajax({url: "/api/transverters", method: "POST", contentType: "application/json",
+          data: JSON.stringify({slots: slots}), timeout: X6100_WAIT_MS})
+    .done(r => {
+      show(r.slots || slots);
+      $("#note").prop("hidden", true);
+      $("#status").text(r.live ? "Saved, and the radio is using them"
+                                : "Saved. The radio picks them up the next time it starts");
+    })
+    .fail((xhr, why) => $("#status").text(x6100FailText(xhr, why)));
+});
+
+load();
+</script>

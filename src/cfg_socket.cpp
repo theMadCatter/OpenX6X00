@@ -9,10 +9,12 @@
  *    {"cmd":"eth_get"}                                -> {"t":"eth", ...}
  *    {"cmd":"eth_set","dhcp":0|1,"ip":..,"mask":..,"gw":..,"dns":..}
  *    {"cmd":"band_use","lo":hz,"hi":hz}               -> {"t":"band_use","use":0|1|2} (none, receive, transmit)
+ *    {"cmd":"xvtr_reload"}                            -> {"t":"ok"}  (re-read the transverter table)
  *  The values are checked here and applied on the LVGL thread through the scheduler, as the
  *  Settings pages apply them.
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "cfg_socket.h"
@@ -276,17 +278,25 @@ static void eth_apply_cb(void *arg) {
     eth_apply((eth_cfg_t *)arg);
 }
 
+/* The web page wrote the transverter table. Re-read it on the LVGL thread:
+ * the generation subject retunes both VFOs (radio.c). */
+static void xvtr_reload_cb(void *arg) {
+    (void)arg;
+    cfg_xvtr_reload();
+}
+
 /* What the radio can do somewhere in [lo, hi] Hz (band_use: HF, the transverters that are on, the X6200's receive
  * ranges): the web Bands page checks a TX shift with it. Read only, answered from this thread */
 static const char *band_use_get(cJSON *req, char *out, size_t size, int *l) {
     cJSON *lo = cJSON_GetObjectItemCaseSensitive(req, "lo");
     cJSON *hi = cJSON_GetObjectItemCaseSensitive(req, "hi");
 
-    if (!cJSON_IsNumber(lo) || !cJSON_IsNumber(hi) || lo->valuedouble < -2e9 || hi->valuedouble > 2e9 ||
+    /* 4e10 is past 30 GHz. double is exact for these integer hertz. */
+    if (!cJSON_IsNumber(lo) || !cJSON_IsNumber(hi) || lo->valuedouble < -2e9 || hi->valuedouble > 4e10 ||
         lo->valuedouble > hi->valuedouble)
         return "Invalid range";
     *l = snprintf(out, size, "{\"t\":\"band_use\",\"use\":%d}\n",
-                  (int)cfg_sm.band_use((int32_t)lo->valuedouble, (int32_t)hi->valuedouble));
+                  (int)cfg_sm.band_use((int64_t)lo->valuedouble, (int64_t)hi->valuedouble));
     return NULL;
 }
 
@@ -313,6 +323,10 @@ static int handle_line(const char *line, char *out, size_t size) {
             err = "Busy, try again";
     } else if (!strcmp(name->valuestring, "band_use")) {
         err = band_use_get(req, out, size, &l);
+    } else if (!strcmp(name->valuestring, "xvtr_reload")) {
+        char one = 1;
+        if (!scheduler_put(xvtr_reload_cb, &one, 1))
+            err = "Busy, try again";
     } else {
         err = "Unknown command";
     }

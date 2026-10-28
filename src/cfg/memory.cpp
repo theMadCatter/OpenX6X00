@@ -8,6 +8,7 @@
 //
 // Field names match the legacy src/cfg module (vfoa_freq, vfoa_mode, vfoa_agc,
 // vfoa_pre, vfoa_att) so existing user memory configurations remain readable.
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include "memory.h"
 
@@ -32,7 +33,8 @@ extern "C" bool cfg_memory_save(int32_t id) {
 // stored frequency) is set first so the band context is correct before the
 // frequency observer fires.
 extern "C" bool cfg_memory_load(int32_t id) {
-    int32_t freq = 0, mode = 0, agc = 0, att = 0, pre = 0;
+    int64_t freq = 0;
+    int32_t mode = 0, agc = 0, att = 0, pre = 0;
     bool    has_freq = false, has_mode = false, has_agc = false, has_att = false, has_pre = false;
 
     if (!MemoryTable::Load(id, freq, has_freq, mode, has_mode, agc, has_agc, att, has_att, pre, has_pre)) {
@@ -42,7 +44,7 @@ extern "C" bool cfg_memory_load(int32_t id) {
     // Derive the band from the restored frequency (mirrors legacy behaviour:
     // a frequency in no active band maps to BAND_UNDEFINED).
     int32_t            band_id = BAND_UNDEFINED;
-    BandInfoLoadResult band    = BandsTable::get_by_freq(static_cast<uint32_t>(freq));
+    BandInfoLoadResult band    = BandsTable::get_by_freq(freq);
     if (band.rc == SUCCESS && band.value.id != BAND_UNDEFINED) {
         band_id = band.value.id;
     }

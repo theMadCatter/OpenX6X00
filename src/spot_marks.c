@@ -1,5 +1,7 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "spot_marks.h"
@@ -38,11 +40,12 @@ typedef struct {
 #define BIRDIE_H    9
 static lv_obj_t      *bticks[BIRDIE_POOL];
 static mark_t         marks[POOL];
-static int32_t        shown_hz[POOL];   /* the spots drawn now, for the tuning snap */
+static int64_t        shown_hz[POOL];   /* the spots drawn now, for the tuning snap */
 static int            shown_n;
 static bool           ready;
 static lv_coord_t     line_y0, tag_y0;
-static int32_t        span_center, span_half;
+static int64_t        span_center;
+static int32_t        span_half;
 static cluster_spot_t spots[CLUSTER_MAX_SPOTS];
 static int            spots_n;
 static uint32_t       spots_gen;
@@ -62,7 +65,7 @@ static void redraw(void) {
     lv_coord_t end[ROWS][POOL];
     lv_coord_t start[ROWS][POOL];
     int      cnt[ROWS] = {0};
-    int32_t  left = span_center - span_half;
+    int64_t  left = span_center - span_half;
     uint16_t now  = utc_now_min();
     const cluster_filter_t *flt = cluster_filter();
     lv_area_t col;
@@ -252,15 +255,15 @@ void spot_marks_init(lv_obj_t *parent, lv_coord_t line_y, lv_coord_t tag_y) {
     }
 }
 
-bool spot_marks_crossed(int32_t from, int32_t to, int32_t *spot_hz) {
+bool spot_marks_crossed(int64_t from, int64_t to, int64_t *spot_hz) {
     bool found = false;
 
     for (int i = 0; i < shown_n; i++) {
-        int32_t f = shown_hz[i];
+        int64_t f = shown_hz[i];
         bool    past = to > from ? (f > from && f <= to) : (f < from && f >= to);
 
         /* The first one on the way */
-        if (past && (!found || abs(f - from) < abs(*spot_hz - from))) {
+        if (past && (!found || llabs(f - from) < llabs(*spot_hz - from))) {
             *spot_hz = f;
             found    = true;
         }
@@ -268,7 +271,7 @@ bool spot_marks_crossed(int32_t from, int32_t to, int32_t *spot_hz) {
     return found;
 }
 
-void spot_marks_update(int32_t center, int32_t half_width) {
+void spot_marks_update(int64_t center, int32_t half_width) {
     if (!ready || (center == span_center && half_width == span_half)) {
         return;
     }

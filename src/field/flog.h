@@ -4,6 +4,8 @@
  *  Xiegu X6100 LVGL GUI - Field Ops: the activation log, one ADIF file per activation
  *  (MY_SOTA_REF, MY_SIG POTA / MY_POTA_REF, MY_SIG WWBOTA, HOTA, WWFF, TOTA, WCA, MOTA, ARLHS or TILES / MY_SIG_INFO;
  *  a Tiles activation's tile in MY_GRIDSQUARE too)
+ *
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #pragma once
@@ -20,7 +22,7 @@ extern "C" {
 typedef struct {
     time_t  t;
     char    call[16];
-    int32_t freq_hz;
+    int64_t freq_hz;
     char    mode[8];    /* ADIF: CW, SSB, AM, FM, FT8 */
     char    rst_s[4], rst_r[4];
     char    name[48], qth[48], grid[8], country[32];   /* the other station, from a logbook lookup; "" unknown */
@@ -57,7 +59,7 @@ const char *field_prog_sig(char prog);
 const char *field_qso_tag(const field_qso_t *q);
 
 /* ADIF band ("20m"), "" outside the amateur bands */
-const char *field_band(int32_t hz);
+const char *field_band(int64_t hz);
 
 /* One ADIF record (with <eor>) into buf; returns its length */
 size_t field_adif_record(char *buf, size_t size, const field_qso_t *q, const field_station_t *st);

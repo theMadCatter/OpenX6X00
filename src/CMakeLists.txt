@@ -1,10 +1,11 @@
 # The GUI program, x6100_gui. Copyright (c) 2026 Giovanni Ricciardi IU1WXY
+# Copyright (c) 2026 Chris Fink KD0CQ
 # The source order below is the link order: keep it when adding files.
 add_executable(${PROJECT_NAME})
 
 target_sources(${PROJECT_NAME} PUBLIC
     gui_main.c screen_main.c walkie.c gui_styles.c mono.c wf_palettes.c
-    spectrum_view.c radio.c dsp.cpp util.cpp
+    spectrum_view.c radio.c dsp.cpp util.cpp xvtr.c
     waterfall_view.c knob_device.c key_input.c mfk_device.c
     gui_events.c msg_box.c msg_note.c front_keys.c kbd_rollover.c
     mic_keys.c clock.c bat_est.c bat_watch.c info_bar.c smeter.c

@@ -8,6 +8,7 @@
 // Parameter<float> / Parameter<std::string> instances owned by the static
 // SettingsManager (cfg_api.cpp). Creation stays C++-only (validators and
 // storage wiring are C++ constructs).
+// Copyright (c) 2026 Chris Fink KD0CQ
 
 #include <stdint.h>
 
@@ -15,6 +16,7 @@
 #include "parameter.h"
 
 using ParamInt   = Parameter<int32_t>;
+using ParamHz    = Parameter<int64_t>;
 // Every float setting is stored scaled (Parameter<float, int32_t, N>, N differs),
 // so the C handle is a read-only view of the value: no cast to a wrong scale,
 // no set() that would write the float unscaled. Set them from C++ through the
@@ -24,6 +26,7 @@ using ParamText  = Parameter<std::string>;
 #else
 // Opaque C handles (resolved to real C++ types in C++ builds).
 typedef struct ParamInt   ParamInt;
+typedef struct ParamHz    ParamHz;
 typedef struct ParamFloat ParamFloat;
 typedef struct ParamText  ParamText;
 #endif
@@ -34,6 +37,8 @@ extern "C" {
 
 int32_t     param_i_get(const ParamInt *p);
 void        param_i_set(ParamInt *p, int32_t v);
+int64_t     param_hz_get(const ParamHz *p);
+void        param_hz_set(ParamHz *p, int64_t v);
 float       param_f_get(const ParamFloat *p);
 
 #ifdef __cplusplus

@@ -4,6 +4,7 @@
  *  Xiegu X6100 LVGL GUI
  *
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  *
  *  The spectrum over the waterfall: the DSP's trace with its peaks, and on it the
  *  passband, the notch, the decoder tones and the VFO line. With the DRM planes the
@@ -665,7 +666,7 @@ static void on_levels_change(Subject *subj, void *user_data) {
 }
 
 static void on_vfo_change(Subject *subj, void *user_data) {
-    vfo_hz = cparam_i_get(cfg_fg_freq);
+    vfo_hz = cparam_hz_get(cfg_fg_freq);
     kept_settle();
     scheduler_put_coalesced(spectrum_refresh);
 }

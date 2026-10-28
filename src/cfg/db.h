@@ -60,6 +60,10 @@ template <typename T> std::string value_to_string(const T &value) {
         std::array<char, 12> buf{}; // enough for 32-bit int
         auto [ptr, ec] = std::to_chars(buf.data(), buf.data() + buf.size(), value);
         return std::string(buf.data(), ptr);
+    } else if constexpr (std::is_same_v<T, int64_t>) {
+        std::array<char, 24> buf{}; // a microwave frequency, Hz
+        auto [ptr, ec] = std::to_chars(buf.data(), buf.data() + buf.size(), value);
+        return std::string(buf.data(), ptr);
     } else if constexpr (std::is_same_v<T, float>) {
         // std::to_chars(float) requires libstdc++ >= 11; fall back to snprintf
         // to keep compatibility with older toolchains.
@@ -99,6 +103,9 @@ class ParamsTable {
             if constexpr (std::is_same_v<T, int32_t>) {
                 value = sqlite3_column_int(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%i", name, value);
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                value = sqlite3_column_int64(load_stmt_, 0);
+                LV_LOG_USER("Loaded %s=%lli", name, static_cast<long long>(value));
             } else if constexpr (std::is_same_v<T, float>) {
                 value = sqlite3_column_double(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%f", name, value);
@@ -131,6 +138,8 @@ class ParamsTable {
 
         if constexpr (std::is_same_v<T, int32_t>) {
             rc = sqlite3_bind_int(save_stmt_, save_val_param_index_, value);
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            rc = sqlite3_bind_int64(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, float>) {
             rc = sqlite3_bind_double(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, std::string>) {
@@ -180,8 +189,8 @@ enum band_type_t {
 struct BandInfo {
     int32_t     id = BAND_UNDEFINED;  // Band ID. 0 or positive for defined bands
     std::string name;                 // Band name
-    uint32_t    start_freq;           // Start freq
-    uint32_t    stop_freq;            // Stop freq (including)
+    int64_t     start_freq = 0;       // Start freq, Hz. int64: 10 GHz and 24 GHz do not fit in 32 bits
+    int64_t     stop_freq  = 0;       // Stop freq (including)
     band_type_t type = BAND_INACTIVE; // active flag to filter bands during band_up/down
 };
 
@@ -196,8 +205,8 @@ class BandsTable {
     static void Shutdown();
 
     static BandInfoLoadResult    get_by_id(int32_t band_id);
-    static BandInfoLoadResult    get_by_freq(uint32_t freq);
-    static BandInfoLoadResult    next(int32_t cur_band_id, uint32_t cur_freq, bool up);
+    static BandInfoLoadResult    get_by_freq(int64_t freq);
+    static BandInfoLoadResult    next(int32_t cur_band_id, int64_t cur_freq, bool up);
     static std::vector<BandInfo> all_bands();
 
   private:
@@ -262,6 +271,9 @@ class BandParamsTable {
             if constexpr (std::is_same_v<T, int32_t>) {
                 value = sqlite3_column_int(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%i (band_id=%i)", name, value, band_id);
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                value = sqlite3_column_int64(load_stmt_, 0);
+                LV_LOG_USER("Loaded %s=%lli", name, static_cast<long long>(value));
             } else if constexpr (std::is_same_v<T, float>) {
                 value = sqlite3_column_double(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%f (band_id=%i)", name, value, band_id);
@@ -299,6 +311,8 @@ class BandParamsTable {
 
         if constexpr (std::is_same_v<T, int32_t>) {
             rc = sqlite3_bind_int(save_stmt_, save_val_param_index_, value);
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            rc = sqlite3_bind_int64(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, float>) {
             rc = sqlite3_bind_double(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, std::string>) {
@@ -370,6 +384,9 @@ class ModeParamsTable {
             if constexpr (std::is_same_v<T, int32_t>) {
                 value = sqlite3_column_int(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%i (mode=%i)", name, value, mode);
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                value = sqlite3_column_int64(load_stmt_, 0);
+                LV_LOG_USER("Loaded %s=%lli", name, static_cast<long long>(value));
             } else if constexpr (std::is_same_v<T, float>) {
                 value = sqlite3_column_double(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%f (mode=%i)", name, value, mode);
@@ -407,6 +424,8 @@ class ModeParamsTable {
 
         if constexpr (std::is_same_v<T, int32_t>) {
             rc = sqlite3_bind_int(save_stmt_, save_val_param_index_, value);
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            rc = sqlite3_bind_int64(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, float>) {
             rc = sqlite3_bind_double(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, std::string>) {
@@ -450,11 +469,12 @@ class ModeParamsTable {
 };
 
 // Transverter configuration: (transverter_id, name, val) rows in the legacy
-// `transverter` SQLite table. `id` is the transverter number (0 or 1), `name`
-// is "from"/"to"/"shift" and `val` is a frequency in Hz (int32_t). Uses the
-// exact legacy column names and UNIQUE(id, name) constraint so existing user
-// data survives migration. Follows the BandParamsTable pattern; context_id in
-// StorageKey maps to `id` (fixed for the parameter's lifetime — never switched).
+// `transverter` SQLite table. `id` is the slot (0 .. XVTR_COUNT-1). `name` is
+// "from"/"to"/"shift" and the later rows ("lo", "en", "side", "rx", "pwr",
+// "cal", "name"). `val` is an INTEGER, which SQLite stores in 64 bits, so a
+// 10 GHz or 24 GHz edge survives. Uses the exact legacy column names and
+// UNIQUE(id, name) constraint so existing user data survives. An older build
+// ignores the rows it does not know. Follows the BandParamsTable pattern.
 class TransverterTable {
   public:
     static bool Init(sqlite3 *database);
@@ -481,6 +501,9 @@ class TransverterTable {
             if constexpr (std::is_same_v<T, int32_t>) {
                 value = sqlite3_column_int(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%i", name, value);
+            } else if constexpr (std::is_same_v<T, int64_t>) {
+                value = sqlite3_column_int64(load_stmt_, 0);
+                LV_LOG_USER("Loaded %s=%lli", name, static_cast<long long>(value));
             } else if constexpr (std::is_same_v<T, float>) {
                 value = sqlite3_column_double(load_stmt_, 0);
                 LV_LOG_USER("Loaded %s=%f", name, value);
@@ -518,6 +541,8 @@ class TransverterTable {
 
         if constexpr (std::is_same_v<T, int32_t>) {
             rc = sqlite3_bind_int(save_stmt_, save_val_param_index_, value);
+        } else if constexpr (std::is_same_v<T, int64_t>) {
+            rc = sqlite3_bind_int64(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, float>) {
             rc = sqlite3_bind_double(save_stmt_, save_val_param_index_, value);
         } else if constexpr (std::is_same_v<T, std::string>) {
@@ -573,13 +598,13 @@ class MemoryTable {
 
     // Save a single (id, name, val) row. INSERT OR REPLACE makes repeated
     // saves of the same name for the same id overwrite the previous value.
-    static int Save(int32_t id, const char *name, int32_t value);
+    static int Save(int32_t id, const char *name, int64_t value);
 
     // Reads all rows for the given id and fills the output fields. Each field
     // has a paired `has_*` flag that is true only when a matching row was
     // found. Returns false if no vfoa_freq row exists for this id (the slot
     // is not loadable); otherwise true.
-    static bool Load(int32_t id, int32_t &freq, bool &has_freq, int32_t &mode, bool &has_mode, int32_t &agc,
+    static bool Load(int32_t id, int64_t &freq, bool &has_freq, int32_t &mode, bool &has_mode, int32_t &agc,
                      bool &has_agc, int32_t &att, bool &has_att, int32_t &pre, bool &has_pre);
 
   private:

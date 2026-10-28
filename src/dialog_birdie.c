@@ -6,6 +6,7 @@
  *  can take one out of the passband (Settings > Display > Birdies, also the Marks button here).
  *
  *  Copyright (c) 2026 Joeri Van Dooren ON6URE / Guru-RF
+ *  Copyright (c) 2026 Chris Fink KD0CQ
  */
 
 #include "dialog_birdie.h"
@@ -59,7 +60,7 @@ static void known_update(void) {
         snprintf(s, sizeof(s), "Known birdies: none yet.");
     else
         snprintf(s, sizeof(s), "Known birdies: %d, %d on this band.", n,
-                 birdie_count_in(cparam_i_get(cfg_fg_freq) - 500000, cparam_i_get(cfg_fg_freq) + 500000));
+                 birdie_count_in(cparam_hz_get(cfg_fg_freq) - 500000, cparam_hz_get(cfg_fg_freq) + 500000));
     lv_label_set_text(known_label, s);
 }
 
